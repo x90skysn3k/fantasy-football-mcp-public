@@ -62,7 +62,7 @@ def test_fastmcp_server():
     # Test 4: Try to call ff_get_optimal_lineup
     print("\n🔍 Step 4: Testing ff_get_optimal_lineup...")
     try:
-        payload = {"arguments": {"league_key": "461.l.61410", "strategy": "balanced"}}
+        payload = {"arguments": {"league_key": "nfl.l.XXXXXX", "strategy": "balanced"}}
         headers = {"Content-Type": "application/json"}
 
         response = requests.post(
