@@ -122,11 +122,11 @@ docker run -p 8080:8080 --env-file .env fantasy-football-mcp
 
 ### Environment Variables (.env)
 ```env
-YAHOO_CONSUMER_KEY=dj0yJmk9RUxycTRzNjJkdW1rJmQ9WVdrOVNtSXdNM3BWYUhJbWNHbzlNQT09JnM9Y29uc3VtZXJzZWNyZXQmc3Y9MCZ4PTNm
-YAHOO_CONSUMER_SECRET=d56351e699f40c0c341cf9fd294d0340625d04dd
+YAHOO_CONSUMER_KEY=your_consumer_key_here
+YAHOO_CONSUMER_SECRET=your_consumer_secret_here
 YAHOO_ACCESS_TOKEN=[current_token]
 YAHOO_REFRESH_TOKEN=[current_refresh_token]
-YAHOO_GUID=QQQ5VN577FJJ4GT2NLMJMIYEBU  # Required for multi-league
+YAHOO_GUID=your_yahoo_guid_here  # Required for multi-league
 
 # For remote MCP servers (Render deployment)
 DEBUG=true
@@ -134,7 +134,7 @@ ALLOWED_CLIENT_IDS=*
 ALLOWED_REDIRECT_URIS=*
 OAUTH_CLIENT_SECRET=secure-secret-change-this-in-production
 CORS_ORIGINS=*
-RENDER_EXTERNAL_URL=https://fantasy-football-mcp-server.onrender.com
+RENDER_EXTERNAL_URL=https://your-app-name.onrender.com
 ```
 
 ### Claude Code Configuration (~/.claude.json)
@@ -144,14 +144,14 @@ RENDER_EXTERNAL_URL=https://fantasy-football-mcp-server.onrender.com
     "type": "stdio",
     "command": "python",
     "args": [
-      "/home/derek/apps/fantasy-football-mcp-server/fantasy_football_multi_league.py"
+      "/path/to/your/fantasy-football-mcp-server/fantasy_football_multi_league.py"
     ],
     "env": {
-      "YAHOO_ACCESS_TOKEN": "...",
-      "YAHOO_CONSUMER_KEY": "...",
-      "YAHOO_CONSUMER_SECRET": "...",
-      "YAHOO_REFRESH_TOKEN": "...",
-      "YAHOO_GUID": "QQQ5VN577FJJ4GT2NLMJMIYEBU"
+      "YAHOO_ACCESS_TOKEN": "your_access_token_here",
+      "YAHOO_CONSUMER_KEY": "your_consumer_key_here",
+      "YAHOO_CONSUMER_SECRET": "your_consumer_secret_here",
+      "YAHOO_REFRESH_TOKEN": "your_refresh_token_here",
+      "YAHOO_GUID": "your_yahoo_guid_here"
     }
   }
 }
@@ -189,8 +189,8 @@ teams[key]["team"][0]  # List of dict elements
 ```python
 # Get top 10 picks with balanced strategy
 {
-  "league_key": "461.l.61410",
-  "strategy": "balanced",           # conservative, aggressive, balanced  
+  "league_key": "nfl.l.XXXXXX",
+  "strategy": "balanced",           # conservative, aggressive, balanced
   "num_recommendations": 10,        # 1-20 recommendations
   "current_pick": 24               # optional overall pick number
 }
@@ -200,7 +200,7 @@ teams[key]["team"][0]  # List of dict elements
 ```python
 # Analyze current draft position and needs
 {
-  "league_key": "461.l.61410", 
+  "league_key": "nfl.l.XXXXXX",
   "strategy": "balanced"           # affects strategic advice
 }
 ```
@@ -225,9 +225,9 @@ teams[key]["team"][0]  # List of dict elements
 ```python
 # Compare two teams in the same league
 {
-  "league_key": "461.l.61410",
-  "team_key_a": "461.l.61410.t.1",
-  "team_key_b": "461.l.61410.t.2"
+  "league_key": "nfl.l.XXXXXX",
+  "team_key_a": "nfl.l.XXXXXX.t.1",
+  "team_key_b": "nfl.l.XXXXXX.t.2"
 }
 ```
 
@@ -283,23 +283,22 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
 Types: feat, fix, docs, style, refactor, test, chore
 
-## Active Leagues (2025)
-1. Anyone But Andy (461.l.61410) - Team: BreesusChr1st
-2. Superbowl or Bust (461.l.92016)
-3. Forte Ounces to Freedom (461.l.914466)
-4. Murderer's Row (461.l.96875)
+## Example League Configuration
+Replace these with your actual league keys:
+1. Your League Name (nfl.l.XXXXXX) - Team: Your Team Name
+2. Another League (nfl.l.YYYYYY)
 
 ## Render Deployment
 
-Service URL: https://fantasy-football-mcp-server.onrender.com
+Service URL: https://your-app-name.onrender.com
 
 Monitor deployment:
 ```bash
 # Check deployment status
-render deploys list fantasy-football-mcp-server
+render deploys list your-app-name
 
 # View logs
-render logs fantasy-football-mcp-server -o text
+render logs your-app-name -o text
 
 # Trigger manual deploy
 git push origin main  # Auto-deploys from main branch
