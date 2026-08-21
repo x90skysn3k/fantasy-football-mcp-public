@@ -502,6 +502,42 @@ class TestMainFunctionsByeWeeks:
     """Test bye week handling in main fantasy_football_multi_league.py functions."""
 
     @pytest.mark.asyncio
+    async def test_get_waiver_wire_players_propagates_malformed_season_error(self):
+        """Malformed season metadata must surface instead of returning an empty list."""
+        from fantasy_football_multi_league import get_waiver_wire_players
+
+        season_error = RuntimeError("Yahoo NFL game metadata has malformed season")
+        with (
+            patch(
+                "fantasy_football_multi_league._resolve_league_season",
+                AsyncMock(side_effect=season_error),
+            ),
+            patch("fantasy_football_multi_league.yahoo_api_call", new_callable=AsyncMock) as mock_api,
+        ):
+            with pytest.raises(RuntimeError, match="malformed season"):
+                await get_waiver_wire_players("461.l.61410")
+
+        mock_api.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_get_draft_rankings_propagates_malformed_season_error(self):
+        """Malformed season metadata must surface instead of returning an empty list."""
+        from fantasy_football_multi_league import get_draft_rankings
+
+        season_error = ValueError("Unsupported fantasy season metadata")
+        with (
+            patch(
+                "fantasy_football_multi_league._resolve_league_season",
+                AsyncMock(side_effect=season_error),
+            ),
+            patch("fantasy_football_multi_league.yahoo_api_call", new_callable=AsyncMock) as mock_api,
+        ):
+            with pytest.raises(ValueError, match="Unsupported fantasy season"):
+                await get_draft_rankings(league_key="461.l.61410")
+
+        mock_api.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_get_waiver_wire_players_bye_week_extraction(self):
         """Test that get_waiver_wire_players correctly extracts and validates bye weeks.
         

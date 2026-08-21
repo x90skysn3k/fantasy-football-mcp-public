@@ -126,7 +126,7 @@ def _iter_yahoo_games(data: dict[str, Any]) -> list[tuple[dict[str, Any], Any]]:
 
 async def discover_nfl_game() -> dict[str, Any]:
     """Discover the active Yahoo NFL game by symbolic game code."""
-    data = await yahoo_api_call("users;use_login=1/games;game_keys=nfl")
+    data = await yahoo_api_call("users;use_login=1/games;game_keys=nfl", use_cache=False)
 
     for metadata, _ in _iter_yahoo_games(data):
         if metadata.get("code") != "nfl":
@@ -160,8 +160,13 @@ def _iter_yahoo_league_dicts(data: dict[str, Any], nfl_game_key: str) -> list[di
             league_info = league_entry.get("league")
             if isinstance(league_info, list) and league_info:
                 first = league_info[0]
-                if isinstance(first, list) and first and isinstance(first[0], dict):
-                    league_dicts.append(first[0])
+                if isinstance(first, list):
+                    merged: dict[str, Any] = {}
+                    for item in first:
+                        if isinstance(item, dict):
+                            merged.update(item)
+                    if merged:
+                        league_dicts.append(merged)
                 elif isinstance(first, dict):
                     league_dicts.append(first)
     return league_dicts
@@ -176,7 +181,7 @@ async def discover_leagues() -> dict[str, dict[str, Any]]:
     if season in LEAGUES_CACHE:
         return LEAGUES_CACHE[season]
 
-    data = await yahoo_api_call("users;use_login=1/games;game_keys=nfl/leagues")
+    data = await yahoo_api_call("users;use_login=1/games;game_keys=nfl/leagues", use_cache=False)
     leagues: dict[str, dict[str, Any]] = {}
     for league_dict in _iter_yahoo_league_dicts(data, game_key):
         league_key = league_dict.get("league_key", "")
@@ -188,7 +193,7 @@ async def discover_leagues() -> dict[str, dict[str, Any]]:
             if league_season is not None
             else season
         )
-        leagues[league_key] = {
+        league_record = {
             "key": league_key,
             "id": league_dict.get("league_id", ""),
             "name": league_dict.get("name", "Unknown"),
@@ -198,6 +203,11 @@ async def discover_leagues() -> dict[str, dict[str, Any]]:
             "current_week": league_dict.get("current_week", 1),
             "is_finished": league_dict.get("is_finished", 0),
         }
+        if "status" in league_dict:
+            league_record["status"] = league_dict["status"]
+        if "count" in league_dict:
+            league_record["count"] = league_dict["count"]
+        leagues[league_key] = league_record
 
     LEAGUES_CACHE[season] = leagues
     return leagues
@@ -315,65 +325,59 @@ async def get_waiver_wire_players(
     league_key: str, position: str = "all", sort: str = "rank", count: int = 30
 ) -> list[dict]:
     """Get available waiver wire players with detailed stats."""
-    try:
-        season = await _resolve_league_season(league_key)
-        pos_filter = f";position={position}" if position != "all" else ""
-        sort_type = {
-            "rank": "OR",
-            "points": "PTS",
-            "owned": "O",
-            "trending": "A",
-        }.get(sort, "OR")
+    season = await _resolve_league_season(league_key)
+    pos_filter = f";position={position}" if position != "all" else ""
+    sort_type = {
+        "rank": "OR",
+        "points": "PTS",
+        "owned": "O",
+        "trending": "A",
+    }.get(sort, "OR")
 
-        endpoint = (
-            f"league/{league_key}/players;status=A{pos_filter};sort={sort_type};count={count}"
-        )
-        data = await yahoo_api_call(endpoint)
-        players = parse_yahoo_free_agent_players(data, season=season)
+    endpoint = (
+        f"league/{league_key}/players;status=A{pos_filter};sort={sort_type};count={count}"
+    )
+    data = await yahoo_api_call(endpoint)
+    players = parse_yahoo_free_agent_players(data, season=season)
 
-        for player_info in players:
-            player_info.setdefault("team", "FA")
-            player_info.setdefault("owned_pct", 0)
-            player_info.setdefault("weekly_change", 0)
-            player_info.setdefault("injury_status", "Healthy")
+    for player_info in players:
+        player_info.setdefault("team", "FA")
+        player_info.setdefault("owned_pct", 0)
+        player_info.setdefault("weekly_change", 0)
+        player_info.setdefault("injury_status", "Healthy")
 
-        return players
-    except Exception:
-        return []
+    return players
 
 
 async def get_draft_rankings(
     league_key: Optional[str] = None, position: str = "all", count: int = 50
 ) -> list[dict]:
     """Get pre-draft rankings with ADP data."""
-    try:
-        if not league_key:
-            leagues = await discover_leagues()
-            if leagues:
-                league_key = list(leagues.keys())[0]
-            else:
-                return []
+    if not league_key:
+        leagues = await discover_leagues()
+        if leagues:
+            league_key = list(leagues.keys())[0]
+        else:
+            return []
 
-        season = await _resolve_league_season(league_key)
-        pos_filter = f";position={position}" if position != "all" else ""
-        endpoint = f"league/{league_key}/players{pos_filter};sort=OR;count={count}"
-        data = await yahoo_api_call(endpoint)
-        players = parse_yahoo_free_agent_players(data, season=season)
+    season = await _resolve_league_season(league_key)
+    pos_filter = f";position={position}" if position != "all" else ""
+    endpoint = f"league/{league_key}/players{pos_filter};sort=OR;count={count}"
+    data = await yahoo_api_call(endpoint)
+    players = parse_yahoo_free_agent_players(data, season=season)
 
-        for rank, player_info in enumerate(players, start=1):
-            player_info.setdefault("rank", rank)
+    for rank, player_info in enumerate(players, start=1):
+        player_info.setdefault("rank", rank)
 
-        players.sort(
-            key=lambda x: (
-                float(x.get("average_draft_position", 999))
-                if x.get("average_draft_position") != "N/A"
-                else 999
-            )
+    players.sort(
+        key=lambda x: (
+            float(x.get("average_draft_position", 999))
+            if x.get("average_draft_position") != "N/A"
+            else 999
         )
+    )
 
-        return players
-    except Exception:
-        return []
+    return players
 
 
 async def get_all_teams_info(league_key: str) -> list[dict]:

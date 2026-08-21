@@ -55,3 +55,38 @@ Focused Task 3 suites passed: 42 tests passed.
 
 ## Concerns
 - None known within Task 3 focused scope.
+
+## Review Fix
+
+### RED Evidence
+- Command: `.venv/bin/python -m pytest tests/unit/test_league_discovery.py tests/unit/test_bye_weeks.py -q`
+  - Expected failures observed before implementation:
+    - `discover_nfl_game` still called `yahoo_api_call` without `use_cache=False`.
+    - repeated `discover_nfl_game()` returned stale cached `933`/`2026` metadata instead of changed `944`/`2027` metadata.
+    - Yahoo league list single-key metadata kept only `league_key`, dropping `league_id`, `name`, `season`, `num_teams`, and `status`.
+    - waiver/draft malformed season errors were swallowed and returned empty lists.
+- Command: `.venv/bin/python -m pytest tests/integration/test_mcp_tools.py::TestPlayerToolsIntegration::test_waiver_wire_yahoo_failure_surfaces_error -q`
+  - Expected failure observed before implementation: handler returned `status == "success"` for a Yahoo API exception because the lower-level broad catch converted it to empty players.
+
+### GREEN Evidence
+- Command: `.venv/bin/python -m pytest tests/unit/test_league_discovery.py tests/unit/test_bye_weeks.py tests/integration/test_mcp_tools.py -q`
+- Result: `47 passed`.
+
+### Changes
+- `discover_nfl_game()` and current dynamic league discovery now call Yahoo with `use_cache=False` so current-season metadata cannot be retained by endpoint cache across seasons.
+- `_iter_yahoo_league_dicts()` merges every dict in Yahoo's list-form league metadata before league records are built.
+- Discovered league records preserve optional `status` and `count` fields when Yahoo supplies them.
+- `get_waiver_wire_players()` and `get_draft_rankings()` no longer use broad empty-list catches; season resolution, Yahoo API, and parser failures propagate.
+- `handle_ff_get_waiver_wire()` now surfaces lower-level waiver fetch failures as `status: "error"` instead of false-success empty players.
+
+### Commit
+- Base Task 3 commit from original implementation: `e24fdbf`.
+- Review fix commit: `TO_BE_FILLED_AFTER_COMMIT`.
+
+### Self-Review
+- Focus stayed on the three Important findings plus the required handler regression.
+- No OAuth credential custody, Reddit behavior, docs, formatters, linters, builds, or project-wide tests were touched.
+- Broad catches remain only in unrelated existing paths and enhancement/per-record fallback areas; the waiver/draft Yahoo/runtime path now propagates.
+
+### Concerns
+- Focused suite count is now 47 because five review regressions were added on top of the previous 42 focused tests.

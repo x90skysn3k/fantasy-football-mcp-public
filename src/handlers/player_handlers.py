@@ -314,7 +314,17 @@ async def handle_ff_get_waiver_wire(arguments: dict) -> dict:
     include_external_data = arguments.get("include_external_data", True)
 
     # Fetch basic Yahoo waiver players
-    basic_players = await get_waiver_wire_players(league_key, position, sort, count)
+    try:
+        basic_players = await get_waiver_wire_players(league_key, position, sort, count)
+    except Exception as exc:
+        return {
+            "status": "error",
+            "league_key": league_key,
+            "position": position,
+            "sort": sort,
+            "error": str(exc),
+            "message": "Failed to fetch waiver wire players from Yahoo",
+        }
     if not basic_players:
         return {
             "status": "success",

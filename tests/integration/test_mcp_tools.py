@@ -88,6 +88,40 @@ class TestLeagueToolsIntegration:
             assert result["your_team"]["name"] == "BreesusChr1st"
 
 
+
+
+class TestPlayerToolsIntegration:
+    """Integration tests for player-related MCP tools."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_waiver_wire_yahoo_failure_surfaces_error(self):
+        """Yahoo API failures must not be reported as successful empty waiver results."""
+        import fantasy_football_multi_league as server_module
+        from src.handlers.player_handlers import handle_ff_get_waiver_wire
+
+        with (
+            patch(
+                "fantasy_football_multi_league._resolve_league_season",
+                AsyncMock(return_value=2026),
+            ),
+            patch(
+                "fantasy_football_multi_league.yahoo_api_call",
+                AsyncMock(side_effect=RuntimeError("Yahoo API unavailable")),
+            ),
+        ):
+            result = await handle_ff_get_waiver_wire(
+                {
+                    "league_key": "461.l.61410",
+                    "include_analysis": False,
+                    "include_projections": False,
+                    "include_external_data": False,
+                }
+            )
+
+        assert server_module.server is not None
+        assert result["status"] == "error"
+        assert "Yahoo API unavailable" in result["error"]
 class TestRosterToolsIntegration:
     """Integration tests for roster-related tools."""
 

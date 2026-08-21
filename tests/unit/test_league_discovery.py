@@ -71,8 +71,44 @@ async def test_discover_nfl_game_selects_nfl_by_code_from_nonzero_key():
     with patch("fantasy_football_multi_league.yahoo_api_call", AsyncMock(return_value=response)) as mock_api:
         result = await discover_nfl_game()
 
-    mock_api.assert_awaited_once_with("users;use_login=1/games;game_keys=nfl")
+    mock_api.assert_awaited_once_with(
+        "users;use_login=1/games;game_keys=nfl", use_cache=False
+    )
     assert result == {"game_key": "933", "season": 2026, "code": "nfl"}
+
+
+@pytest.mark.asyncio
+async def test_discover_nfl_game_bypasses_endpoint_cache_for_current_metadata():
+    from fantasy_football_multi_league import discover_nfl_game
+
+    responses = iter(
+        [
+            yahoo_games_response(game("933", "nfl", "2026")),
+            yahoo_games_response(game("944", "nfl", "2027")),
+        ]
+    )
+    endpoint_cache = {}
+    calls = []
+
+    async def fake_yahoo_api_call(endpoint, *, use_cache=True):
+        calls.append((endpoint, use_cache))
+        if use_cache and endpoint in endpoint_cache:
+            return endpoint_cache[endpoint]
+        response = next(responses)
+        if use_cache:
+            endpoint_cache[endpoint] = response
+        return response
+
+    with patch("fantasy_football_multi_league.yahoo_api_call", fake_yahoo_api_call):
+        first = await discover_nfl_game()
+        second = await discover_nfl_game()
+
+    assert first == {"game_key": "933", "season": 2026, "code": "nfl"}
+    assert second == {"game_key": "944", "season": 2027, "code": "nfl"}
+    assert calls == [
+        ("users;use_login=1/games;game_keys=nfl", False),
+        ("users;use_login=1/games;game_keys=nfl", False),
+    ]
 
 
 @pytest.mark.asyncio
@@ -119,6 +155,42 @@ async def test_discover_leagues_uses_nfl_game_at_nonzero_key_and_integer_season(
             "is_finished": 0,
         }
     }
+
+
+@pytest.mark.asyncio
+async def test_discover_leagues_merges_yahoo_single_key_metadata_entries():
+    from fantasy_football_multi_league import discover_leagues
+
+    league_metadata = {
+        "0": {
+            "league": [
+                [
+                    {"league_key": "933.l.61410"},
+                    {"league_id": "61410"},
+                    {"name": "Anyone But Andy"},
+                    {"season": "2026"},
+                    {"num_teams": 12},
+                    {"status": "postdraft"},
+                ]
+            ]
+        },
+        "count": 1,
+    }
+    game_response = yahoo_games_response(game("933", "nfl", "2026"))
+    leagues_response = yahoo_games_response(game("933", "nfl", "2026", league_metadata))
+
+    with patch(
+        "fantasy_football_multi_league.yahoo_api_call",
+        AsyncMock(side_effect=[game_response, leagues_response]),
+    ):
+        result = await discover_leagues()
+
+    assert result["933.l.61410"]["key"] == "933.l.61410"
+    assert result["933.l.61410"]["id"] == "61410"
+    assert result["933.l.61410"]["name"] == "Anyone But Andy"
+    assert result["933.l.61410"]["season"] == 2026
+    assert result["933.l.61410"]["num_teams"] == 12
+    assert result["933.l.61410"]["status"] == "postdraft"
 
 
 @pytest.mark.asyncio
