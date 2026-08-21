@@ -115,6 +115,7 @@ ehthumbs.db
 
 # Personal/development directories
 .worktrees/
+.superpowers/
 .claude/
 .qoder/
 .devcontainer/
