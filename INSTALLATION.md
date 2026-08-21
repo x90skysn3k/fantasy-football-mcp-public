@@ -1,317 +1,229 @@
-# Fantasy Football MCP Server - Installation Guide
+# Fantasy Football MCP Server Installation
+
+This guide installs the public Yahoo Fantasy Football MCP stdio server for Claude Desktop or Pi/OMP without putting secrets in client configuration.
+
+Data provided by Yahoo Fantasy Sports. Use requires a Yahoo account, a Yahoo Developer app, and Yahoo Fantasy Sports API access approved by Yahoo.
 
 ## Prerequisites
 
-- Python 3.8 or higher
-- Claude Desktop application
-- Yahoo Fantasy Sports account with active leagues
-- Git (for cloning the repository)
+- Python >=3.9
+- Git
+- A Yahoo Fantasy Sports account with 2026 fantasy football league access
+- A Yahoo Developer app from https://developer.yahoo.com/apps/
+- Manual Yahoo Fantasy Sports API approval from https://sports.yahoo.com/developer/access/
+- Claude Desktop or Pi/OMP if you want MCP client integration
 
-## Step 1: Clone the Repository
+## 1. Clone and install
 
 ```bash
 git clone https://github.com/derekrbreese/fantasy-football-mcp-public.git
 cd fantasy-football-mcp-public
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e .
 ```
 
-## Step 2: Install Python Dependencies
+The editable install reads `pyproject.toml`, installs `mcp>=1.2.0,<2`, and exposes the current console entrypoint:
 
 ```bash
-pip install -r requirements.txt
+fantasy-football-mcp
 ```
 
-Or if you prefer using a virtual environment:
+For MCP client stdio use, configure the Python interpreter and `fantasy_football_multi_league.py` script as shown in section 5.
 
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
-```
+## 2. Create or reuse a Yahoo Developer app
 
-## Step 3: Yahoo API Setup
+1. Open https://developer.yahoo.com/apps/.
+2. Create a new app or open the existing app you want this server to use.
+3. For a new app, use application type `Web Application` and redirect URI `oob` for the manual OAuth flow.
+4. Copy the app's Consumer Key and Consumer Secret.
+5. Store them in the repository `.env` as `YAHOO_CONSUMER_KEY` and `YAHOO_CONSUMER_SECRET`.
 
-### 3.1 Create a Yahoo Developer App — and apply for Fantasy Sports API access
+Use `YAHOO_CONSUMER_KEY` and `YAHOO_CONSUMER_SECRET`. Those are the canonical public setup names the current code reads.
 
-> **⚠️ Yahoo no longer self-serve provisions the Fantasy Sports API.** The app
-> creation form no longer offers a "Fantasy Sports" permission (only OpenID
-> Connect and TW Auction). Creating an app gives you valid OAuth credentials
-> that are **not** entitled to the Fantasy API — every call will return `401`
-> with `oauth_problem="additional_authorization_required"` until Yahoo approves
-> your access application (step 3 below). Refreshing tokens or recreating the
-> app will not fix this. Yahoo has also de-provisioned some previously working
-> apps, so long-time users may need to apply as well.
+## 3. Apply for Yahoo Fantasy Sports API access
 
-1. Go to https://developer.yahoo.com/apps/ and click "Create an App":
-   - **Application Name**: Fantasy Football MCP (or your choice)
-   - **Application Type**: Web Application
-   - **Redirect URI(s)**: `oob` (for out-of-band OAuth flow - you'll copy the verification code manually)
-2. Click "Create App" and save your **Client ID (Consumer Key)** and **Client Secret (Consumer Secret)**.
-3. **Apply for Fantasy Sports API access** at https://sports.yahoo.com/developer/access/ — include the Client ID from step 2 so the approval is attached to the app you already created. Approval is a manual human review with no published turnaround time; the API stays 401 until it lands.
-4. Note that Yahoo currently grants **read-only** access (`fspt-r`) — write access is not available, so nothing in this server can or does write through the API.
+Creating a Yahoo Developer app gives you OAuth credentials, but it does not guarantee Fantasy Sports API entitlement.
 
-**Note**: The authentication scripts use the "oob" (out-of-band) redirect URI, which means you'll copy the verification code from the browser and paste it into the terminal. This is simpler than setting up a callback server.
+1. Open https://sports.yahoo.com/developer/access/.
+2. Submit or verify Fantasy Sports API access for the same app/consumer key from section 2.
+3. Wait for Yahoo's manual review. There is no code path in this project that can bypass Yahoo's approval.
+4. If you already had an app, keep using the existing app identity when requesting access so approval attaches to the credentials in `.env`.
+5. After approval, run setup or reauthorization to create fresh tokens for the approved app.
 
-### 3.2 Initial Authentication
+### Provisioning errors are not token errors
 
-Run the authentication script to get your tokens:
+These responses mean the app is authenticated but not provisioned for Fantasy Sports API access:
 
-```bash
-cd utils
-python setup_yahoo_auth.py
-```
+- HTTP 401 or 403 from Fantasy Sports endpoints after OAuth succeeds
+- `oauth_problem="additional_authorization_required"`
+- `This application is not authorized to perform this action.`
 
-This will:
-1. Open your browser for Yahoo login
-2. Ask you to authorize the app
-3. Automatically save your tokens to `.env` file (preserving line order)
-4. Automatically update MCP config files (Claude Desktop, Cursor, Antigravity)
-5. Display your team information to confirm it's working
+Refreshing or reauthenticating tokens will not fix those errors until Yahoo approves Fantasy Sports API access. Apply at https://sports.yahoo.com/developer/access/ with the existing app/consumer key.
 
-**Note**: The script will automatically update existing token lines in your `.env` file without moving them to the bottom. It also updates MCP configuration files if they exist, so you may not need to manually edit them.
+Use token refresh or reauthorization only for expired, revoked, missing, or rejected OAuth tokens.
 
-For re-authentication (if tokens are completely expired):
-```bash
-python reauth_yahoo.py
-```
+## 4. Configure `.env`
 
-## Step 4: Environment Configuration
-
-The `.env` file should be automatically created and updated by the authentication scripts. The authentication scripts will:
-
-- Update existing token variables on their original lines (preserving file structure)
-- Only add new variables at the end if they don't already exist
-- Automatically update MCP config files (Claude Desktop, Cursor, Antigravity)
-
-Verify your `.env` file contains:
+Create `.env` in the repository root:
 
 ```env
-# Yahoo API Credentials (Required)
-YAHOO_CLIENT_ID=your_consumer_key_here
-YAHOO_CLIENT_SECRET=your_consumer_secret_here
-
-# OAuth tokens (automatically set by setup_yahoo_auth.py or reauth_yahoo.py)
+YAHOO_CONSUMER_KEY=your_consumer_key_here
+YAHOO_CONSUMER_SECRET=your_consumer_secret_here
 YAHOO_ACCESS_TOKEN=your_access_token_here
 YAHOO_REFRESH_TOKEN=your_refresh_token_here
 YAHOO_GUID=your_yahoo_guid_here
+FANTASY_SEASON=2026
 
-# Reddit API Credentials (Optional - for sentiment analysis)
-# See docs/REDDIT_API_SETUP.md for setup instructions
-REDDIT_CLIENT_ID=your_reddit_client_id
-REDDIT_CLIENT_SECRET=your_reddit_client_secret
-REDDIT_USERNAME=your_reddit_username
+# Reddit is unsupported by default and the tool stays hidden unless enabled.
+ENABLE_REDDIT_SENTIMENT=0
+# REDDIT_CLIENT_ID=...
+# REDDIT_CLIENT_SECRET=...
+# REDDIT_USERNAME=...
 ```
 
-**Note**: Since this is a private repository, the `.env` file is tracked for backup purposes.
+Keep `.env` local. Never copy Yahoo tokens, consumer credentials, GUIDs, league keys, or personal paths into public documentation or MCP client config.
 
-### 4.1 Reddit API Setup (Optional)
+### First OAuth setup
 
-If you want to use Reddit sentiment analysis features (`ff_analyze_reddit_sentiment`), you'll need Reddit API credentials:
+```bash
+. .venv/bin/activate
+python utils/setup_yahoo_auth.py
+```
 
-1. See the detailed guide: [Reddit API Setup Guide](docs/REDDIT_API_SETUP.md)
-2. Create a Reddit application at https://www.reddit.com/prefs/apps
-3. Add the credentials to your `.env` file as shown above
+The setup script opens Yahoo OAuth, exchanges the verifier, preflights Fantasy access, and saves Yahoo token metadata to the project `.env`.
 
-The app will work without Reddit credentials, but sentiment analysis will use fallback methods.
+### Existing-app reauthorization
 
-## Step 5: Claude Desktop Configuration
+Run this after Yahoo grants Fantasy access, after a refresh grant expires, or when you need to authorize the same app again:
 
-### 5.1 Automatic MCP Config Update
+```bash
+. .venv/bin/activate
+python utils/reauth_yahoo.py
+```
 
-The authentication scripts (`setup_yahoo_auth.py` and `reauth_yahoo.py`) automatically update MCP configuration files if they exist:
+### Token refresh
 
-- **Claude Desktop**: `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
-- **Cursor**: `~/.cursor/mcp.json`
-- **Antigravity**: `~/.gemini/antigravity/mcp_config.json`
+```bash
+. .venv/bin/activate
+python utils/refresh_yahoo_token.py
+```
 
-After running authentication, if these config files exist, they will be automatically updated with your tokens. You'll just need to:
-1. Make sure the server path is correct
-2. Restart the MCP client
+Restart Claude Desktop or Pi/OMP after token changes.
 
-### 5.2 Manual Configuration (if needed)
+## 5. Configure MCP stdio clients without secrets
 
-If you need to manually configure or the automatic update didn't work, locate your config file:
+Use the same command/args/cwd configuration for Claude Desktop and Pi/OMP. The server loads secrets from `.env`; client config should contain no `env` block and no credential values.
 
-**Claude Desktop**:
-- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
-- **Linux**: `~/.config/Claude/claude_desktop_config.json`
+### Claude Desktop
 
-**Cursor**: `~/.cursor/mcp.json`
-
-Add the following to your MCP config file:
+Add this server entry to `claude_desktop_config.json`, preserving any unrelated entries:
 
 ```json
 {
   "mcpServers": {
     "yahoo-fantasy-football": {
-      "command": "python",
+      "command": "/absolute/path/to/fantasy-football-mcp-public/.venv/bin/python",
       "args": [
-        "/absolute/path/to/fantasy_football_multi_league.py"
+        "/absolute/path/to/fantasy-football-mcp-public/fantasy_football_multi_league.py"
       ],
-      "env": {
-        "YAHOO_ACCESS_TOKEN": "your_access_token",
-        "YAHOO_CLIENT_ID": "your_consumer_key",
-        "YAHOO_CLIENT_SECRET": "your_consumer_secret",
-        "YAHOO_REFRESH_TOKEN": "your_refresh_token",
-        "YAHOO_GUID": "your_yahoo_guid"
-      }
+      "cwd": "/absolute/path/to/fantasy-football-mcp-public"
     }
   }
 }
 ```
 
-**Important**: 
-- Replace `/absolute/path/to/` with the actual path to your installation
-- Copy the credentials from your `.env` file (they should already be there if you ran the auth scripts)
-- If you have other MCP servers configured, add this as an additional entry
-- The server name can be either `"yahoo-fantasy-football"` or `"fantasy-football"` - the scripts will update both
+### Pi/OMP
 
-## Step 6: Test the Installation
+Register the same stdio command shape in the active Pi/OMP MCP registration source:
 
-### 6.1 Test Python Server Directly
-
-```bash
-python test_multi_league_server.py
+```json
+{
+  "command": "/absolute/path/to/fantasy-football-mcp-public/.venv/bin/python",
+  "args": [
+    "/absolute/path/to/fantasy-football-mcp-public/fantasy_football_multi_league.py"
+  ],
+  "cwd": "/absolute/path/to/fantasy-football-mcp-public"
+}
 ```
 
-Expected output:
-- Should find all your active leagues
-- Should identify your team in each league
+Replace the paths with absolute paths on the target machine. Do not add credentials to either client config.
 
-### 6.2 Restart Claude Desktop
+## 6. Expected default tools
 
-After updating the configuration:
-1. Completely quit Claude Desktop
-2. Restart Claude Desktop
-3. The MCP tools should now be available
+With Reddit disabled, the stdio server advertises these default tools:
 
-### 6.3 Verify in Claude Desktop
+1. `ff_get_leagues` - list leagues for the authenticated Yahoo account.
+2. `ff_get_league_info` - get league metadata and the user's team.
+3. `ff_get_standings` - get league standings.
+4. `ff_get_teams` - get teams in a league.
+5. `ff_get_roster` - get roster data for the user's team or an optional team key.
+6. `ff_get_matchup` - get raw Yahoo matchup data for a week; it does not add narrative analysis.
+7. `ff_get_players` - browse available free agents.
+8. `ff_compare_teams` - compare two team rosters.
+9. `ff_build_lineup` - optimize a lineup using roster/player data and selected strategy.
+10. `ff_refresh_token` - refresh Yahoo OAuth access tokens.
+11. `ff_get_draft_results` - get team draft positions and grades when Yahoo supplies them; it returns team-level draft fields only.
+12. `ff_get_waiver_wire` - get waiver-wire candidates with stats/projections and optional basic analysis.
+13. `ff_get_api_status` - inspect cache and Yahoo API rate-limit state.
+14. `ff_clear_cache` - clear cached API responses.
+15. `ff_get_draft_rankings` - get Yahoo pre-draft rankings and ADP when available.
+16. `ff_get_draft_recommendation` - get strategy-based recommendations from available player/draft data.
+17. `ff_analyze_draft_state` - get roster needs and strategic draft-state fields.
 
-Ask Claude: "Use the fantasy football tools to show me my leagues"
+`ff_analyze_reddit_sentiment` is optional and hidden by default. It appears in `tools/list` when `ENABLE_REDDIT_SENTIMENT` is truthy. Successful calls also require Reddit dependencies and credentials. Public 2026 setup does not require Reddit.
 
-Claude should be able to use the `ff_get_leagues` tool and show your active leagues.
+## 7. Troubleshooting
 
-## Step 7: Token Management
+### OAuth succeeds but every Fantasy endpoint returns 401 or 403
 
-### Automatic Token Refresh
+If the response contains `additional_authorization_required` or `This application is not authorized to perform this action`, the app still needs Yahoo Fantasy Sports API access. Apply or verify access at https://sports.yahoo.com/developer/access/ for the existing app/consumer key.
 
-The server includes automatic token refresh capability. You can also manually refresh:
+### Missing credential variables
 
-**Through Claude Desktop**: 
-- Ask Claude to "refresh my Yahoo token" or use the `ff_refresh_token` tool
+Use these exact names in `.env`:
 
-**Through Command Line**:
-```bash
-cd utils
-python refresh_yahoo_token.py
+```env
+YAHOO_CONSUMER_KEY=...
+YAHOO_CONSUMER_SECRET=...
 ```
 
-This will:
-- Refresh your access token using the refresh token
-- Update the `.env` file (preserving line order)
-- Update MCP config files automatically if they exist
+Use the canonical consumer key/secret names above for public setup.
 
-### Full Re-authentication
+### Token expired or refresh failed
 
-If tokens are completely expired (after ~60 days) or refresh fails:
+For a normal expired access token:
 
 ```bash
-cd utils
-python reauth_yahoo.py
+. .venv/bin/activate
+python utils/refresh_yahoo_token.py
 ```
 
-Or for first-time setup:
-```bash
-cd utils
-python setup_yahoo_auth.py
-```
-
-Both scripts will:
-- Open your browser for Yahoo OAuth authorization
-- Update tokens in `.env` file (preserving existing line positions)
-- Automatically update MCP config files (Claude Desktop, Cursor, Antigravity)
-- Display confirmation messages
-
-**After re-authentication**: Restart your MCP client (Claude Desktop, Cursor, etc.) to use the new tokens.
-
-## Available MCP Tools
-
-Once installed, you'll have access to 12 tools:
-
-1. **ff_get_leagues** - List all your fantasy football leagues
-2. **ff_get_league_info** - Get detailed league information with your team name
-3. **ff_get_standings** - View current standings
-4. **ff_get_roster** - Get a team roster with team name (accepts optional `team_key`)
-5. **ff_compare_teams** - Compare two teams' rosters
-6. **ff_get_matchup** - View matchup details
-7. **ff_get_players** - Browse available players
-8. **ff_build_lineup** - Build optimal lineup with positional constraints
-9. **ff_refresh_token** - Refresh Yahoo access token
-10. **ff_get_draft_results** - View draft results and grades
-11. **ff_get_waiver_wire** - Find top waiver wire pickups
-12. **ff_get_draft_rankings** - Get pre-draft player rankings
-
-## Troubleshooting
-
-### "Failed to connect to MCP server"
-- Verify Python path in Claude Desktop config
-- Ensure all Python dependencies are installed
-- Check that file paths are absolute, not relative
-
-### "Token expired" errors
-- Run `python refresh_yahoo_token.py`
-- Restart Claude Desktop after refreshing
-
-### "No leagues found"
-- Verify you have active leagues for the current season
-- Check that YAHOO_GUID is set correctly in `.env`
-- Ensure your Yahoo account has fantasy leagues
-
-### "Cannot find team"
-- Make sure YAHOO_GUID is set in both `.env` and Claude config
-- Verify you're a member of the leagues
-
-### Python Import Errors
-- Ensure all requirements are installed: `pip install -r requirements.txt`
-- If using virtual environment, make sure it's activated
-
-## Testing Your Installation
-
-Run the test suite to verify everything is working:
+If the refresh grant is no longer valid:
 
 ```bash
-# Test league discovery
-python test_all_leagues.py
-
-# Test team name retrieval
-python test_team_names.py  
-
-# Test waiver wire and rankings
-python test_waiver_draft.py
+. .venv/bin/activate
+python utils/reauth_yahoo.py
 ```
 
-## Updating
+### No 2026 leagues found
 
-To get the latest updates:
+- Confirm `FANTASY_SEASON=2026` in `.env`.
+- Confirm Yahoo approved the app for Fantasy Sports API access.
+- Confirm `YAHOO_GUID` belongs to the account that owns the league.
+- Confirm the Yahoo account has a 2026 Yahoo Fantasy Football league.
 
-```bash
-git pull origin main
-pip install -r requirements.txt --upgrade
-```
+### Reddit tool missing
 
-Then restart Claude Desktop.
+That is expected by default. Public setup leaves Reddit disabled. To experiment locally, install/configure the optional Reddit dependencies and credentials, then set `ENABLE_REDDIT_SENTIMENT=1` before starting the MCP server.
 
-## Support
+## Security notes
 
-For issues or questions:
-1. Check the [GitHub repository](https://github.com/derekrbreese/fantasy-football-mcp)
-2. Review the CLAUDE.md file for development details
-3. Ensure your Yahoo tokens are current
+- Do not commit `.env`, tokens, consumer secrets, GUIDs, league keys, or personal client config.
+- Keep MCP client config secret-free; use only command, args, and cwd.
+- Yahoo refresh tokens can expire if unused or revoked; reauthorize the same app when needed.
 
-## Security Notes
+## Attribution
 
-- Never share your Yahoo API credentials
-- The `.env` file contains sensitive tokens
-- This repository should remain private
-- Tokens expire after 1 hour (auto-refresh available)
-- Refresh tokens last ~60 days if used regularly
+Data provided by Yahoo Fantasy Sports. Yahoo and Yahoo Fantasy Sports are trademarks or registered trademarks of Yahoo. This project is not endorsed by or affiliated with Yahoo.
