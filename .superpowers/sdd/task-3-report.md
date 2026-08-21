@@ -81,7 +81,7 @@ Focused Task 3 suites passed: 42 tests passed.
 
 ### Commit
 - Base Task 3 commit from original implementation: `e24fdbf`.
-- Review fix commit: `TO_BE_FILLED_AFTER_COMMIT`.
+- Review fix commit: `c493a75`.
 
 ### Self-Review
 - Focus stayed on the three Important findings plus the required handler regression.
