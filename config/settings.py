@@ -26,14 +26,20 @@ class Settings(BaseSettings):
 
     # API Rate Limiting
     yahoo_api_rate_limit: int = Field(default=100, validation_alias="YAHOO_API_RATE_LIMIT")
-    yahoo_api_rate_window_seconds: int = Field(default=3600, validation_alias="YAHOO_API_RATE_WINDOW_SECONDS")
+    yahoo_api_rate_window_seconds: int = Field(
+        default=3600, validation_alias="YAHOO_API_RATE_WINDOW_SECONDS"
+    )
 
     # Logging
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")
-    log_file: Path = Field(default=Path("./logs/yahoo_fantasy_football.log"), validation_alias="LOG_FILE")
+    log_file: Path = Field(
+        default=Path("./logs/yahoo_fantasy_football.log"), validation_alias="LOG_FILE"
+    )
 
     # MCP Server Configuration
-    mcp_server_name: str = Field(default="yahoo-fantasy-football", validation_alias="MCP_SERVER_NAME")
+    mcp_server_name: str = Field(
+        default="yahoo-fantasy-football", validation_alias="MCP_SERVER_NAME"
+    )
     mcp_server_version: str = Field(default="1.0.0", validation_alias="MCP_SERVER_VERSION")
 
     # Parallel Processing
@@ -46,7 +52,9 @@ class Settings(BaseSettings):
     enable_injury_reports: bool = Field(default=True, validation_alias="ENABLE_INJURY_REPORTS")
 
     # Yahoo OAuth Configuration
-    yahoo_redirect_uri: str = Field(default="https://localhost:8090", validation_alias="YAHOO_REDIRECT_URI")
+    yahoo_redirect_uri: str = Field(
+        default="https://localhost:8090", validation_alias="YAHOO_REDIRECT_URI"
+    )
     yahoo_callback_port: int = Field(default=8090, validation_alias="YAHOO_CALLBACK_PORT")
     yahoo_callback_host: str = Field(default="localhost", validation_alias="YAHOO_CALLBACK_HOST")
 

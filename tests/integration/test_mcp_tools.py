@@ -1,6 +1,6 @@
 """Integration tests for MCP tool flows - end-to-end testing."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -88,8 +88,6 @@ class TestLeagueToolsIntegration:
             assert result["your_team"]["name"] == "BreesusChr1st"
 
 
-
-
 class TestPlayerToolsIntegration:
     """Integration tests for player-related MCP tools."""
 
@@ -122,6 +120,8 @@ class TestPlayerToolsIntegration:
         assert server_module.server is not None
         assert result["status"] == "error"
         assert "Yahoo API unavailable" in result["error"]
+
+
 class TestRosterToolsIntegration:
     """Integration tests for roster-related tools."""
 

@@ -4,15 +4,13 @@ Sleeper API client for fantasy football data
 No authentication required - completely free and open API
 """
 
-import asyncio
-import aiohttp
-import json
-from typing import Dict, List, Optional, Any
-from datetime import datetime
-import hashlib
 import difflib
 import os
 import re
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+import aiohttp
 
 # Import caching from our yahoo utils
 from src.api.yahoo_utils import ResponseCache

@@ -111,7 +111,6 @@ class TestGetByeWeekWithFallback:
     def test_get_bye_week_returns_valid_api_data_without_static_dataset(self):
         assert get_bye_week_with_fallback("KC", api_bye_week=7, season=2099) == 7
 
-
     @pytest.mark.parametrize("api_bye_week", [None, 0, 19, True, "7"])
     def test_get_bye_week_uses_static_when_api_data_is_absent_or_invalid(self, api_bye_week):
         assert get_bye_week_with_fallback("KC", api_bye_week=api_bye_week, season=2026) == 5

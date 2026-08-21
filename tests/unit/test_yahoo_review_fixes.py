@@ -2,9 +2,9 @@
 
 import asyncio
 import importlib
+import inspect
 import multiprocessing
 import runpy
-import inspect
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -12,6 +12,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
+
 
 def _load_yahoo_auth_module():
     module_path = Path(__file__).resolve().parents[2] / "src" / "agents" / "yahoo_auth.py"
@@ -54,7 +55,9 @@ def test_settings_accepts_canonical_yahoo_environment_only(tmp_path, monkeypatch
     assert settings.yahoo_client_secret == "canonical-secret"
 
 
-def test_verify_setup_uses_canonical_names_and_never_prints_token_bytes(tmp_path, capsys, monkeypatch):
+def test_verify_setup_uses_canonical_names_and_never_prints_token_bytes(
+    tmp_path, capsys, monkeypatch
+):
     from utils import verify_setup
 
     sentinel_access = "sentinel-access-token-that-must-not-print"
@@ -115,7 +118,9 @@ def test_persist_yahoo_tokens_handles_non_newline_file_and_guid_atomically(tmp_p
     )
 
 
-def test_persist_yahoo_tokens_replace_failure_preserves_original_and_cleans_temp(tmp_path, monkeypatch):
+def test_persist_yahoo_tokens_replace_failure_preserves_original_and_cleans_temp(
+    tmp_path, monkeypatch
+):
     from src.api import yahoo_credentials
 
     env_path = tmp_path / ".env"
@@ -138,7 +143,9 @@ def test_persist_yahoo_tokens_concurrent_writers_leave_one_complete_yahoo_record
     env_path = tmp_path / ".env"
     env_path.write_text("UNRELATED=value", encoding="utf-8")
     ctx = multiprocessing.get_context("spawn")
-    processes = [ctx.Process(target=_persist_tokens_worker, args=((env_path, i),)) for i in range(4)]
+    processes = [
+        ctx.Process(target=_persist_tokens_worker, args=((env_path, i),)) for i in range(4)
+    ]
 
     for process in processes:
         process.start()
@@ -173,7 +180,9 @@ def test_setup_module_import_has_no_interactive_side_effects(monkeypatch):
     assert hasattr(module, "main")
 
 
-def test_manual_setup_provisioning_failure_returns_false_without_success_message(monkeypatch, capsys):
+def test_manual_setup_provisioning_failure_returns_false_without_success_message(
+    monkeypatch, capsys
+):
     module = importlib.import_module("utils.setup_yahoo_auth")
     monkeypatch.setattr("builtins.input", lambda prompt="": "verification-code")
     monkeypatch.setattr(module.webbrowser, "open", lambda url: True)
@@ -209,7 +218,9 @@ def test_reauth_provisioning_failure_returns_false_without_saving_or_success(mon
         def json(self):
             return self._payload
 
-    monkeypatch.setattr(reauth_yahoo, "get_yahoo_consumer_credentials", lambda: ("client", "secret"))
+    monkeypatch.setattr(
+        reauth_yahoo, "get_yahoo_consumer_credentials", lambda: ("client", "secret")
+    )
     monkeypatch.setattr(reauth_yahoo.webbrowser, "open", lambda url: True)
     monkeypatch.setattr("builtins.input", lambda prompt="": "auth-code")
     monkeypatch.setattr(
@@ -285,7 +296,9 @@ def _yahoo_auth_settings(cache_dir):
     )
 
 
-def test_yahoo_auth_persists_only_through_credential_seam_without_json_store(tmp_path, monkeypatch, capsys):
+def test_yahoo_auth_persists_only_through_credential_seam_without_json_store(
+    tmp_path, monkeypatch, capsys
+):
     yahoo_auth = _load_yahoo_auth_module()
 
     cache_dir = tmp_path / "cache"
@@ -293,7 +306,9 @@ def test_yahoo_auth_persists_only_through_credential_seam_without_json_store(tmp
     monkeypatch.setattr(
         yahoo_auth,
         "persist_yahoo_tokens",
-        lambda access, refresh, expires, **kwargs: persist_calls.append((access, refresh, expires, kwargs)),
+        lambda access, refresh, expires, **kwargs: persist_calls.append(
+            (access, refresh, expires, kwargs)
+        ),
         raising=False,
     )
     auth = yahoo_auth.YahooAuth(_yahoo_auth_settings(cache_dir))
@@ -401,6 +416,7 @@ def test_yahoo_auth_authenticate_propagates_expired_token_refresh_persistence_fa
 
     with pytest.raises(yahoo_auth.YahooTokenPersistenceError):
         asyncio.run(auth.authenticate(auto_open_browser=False))
+
 
 def test_yahoo_auth_refresh_attempts_once_not_three_times(tmp_path, monkeypatch):
     yahoo_auth = _load_yahoo_auth_module()
@@ -524,8 +540,10 @@ def test_refresh_cli_returns_nonzero_when_verification_fails(monkeypatch, capsys
     assert "Token verification failed" in output
     assert "Token refresh complete" not in output
 
+
 def test_refresh_cli_main_module_exits_nonzero_on_refresh_failure(monkeypatch):
     import requests
+
     from src.api import yahoo_credentials
 
     class Response:
@@ -542,7 +560,6 @@ def test_refresh_cli_main_module_exits_nonzero_on_refresh_failure(monkeypatch):
         runpy.run_module("utils.refresh_yahoo_token", run_name="__main__")
 
     assert excinfo.value.code == 1
-
 
 
 def test_refresh_cli_returns_zero_only_after_refresh_and_verification_succeed(monkeypatch, capsys):
@@ -562,7 +579,9 @@ def test_refresh_cli_classifies_provisioning_failure_with_shared_message(monkeyp
 
     class Response:
         status_code = 403
-        text = '{"error":{"description":"This application is not authorized to perform this action."}}'
+        text = (
+            '{"error":{"description":"This application is not authorized to perform this action."}}'
+        )
 
     sentinel_access = "sentinel-access-token"
     monkeypatch.setenv("YAHOO_ACCESS_TOKEN", sentinel_access)

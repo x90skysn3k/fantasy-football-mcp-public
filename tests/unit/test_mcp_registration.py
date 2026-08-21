@@ -6,14 +6,13 @@ import builtins
 import importlib
 import json
 import os
-import sys
 import subprocess
-from pathlib import Path
+import sys
 import types
+from pathlib import Path
 from typing import Any
 
 import pytest
-
 
 EXPECTED_DEFAULT_TOOL_NAMES = [
     "ff_get_leagues",
@@ -37,8 +36,7 @@ EXPECTED_DEFAULT_TOOL_NAMES = [
 
 EXPECTED_REDDIT_TOOL_NAME = "ff_analyze_reddit_sentiment"
 
-EXPECTED_DEFAULT_SCHEMAS = json.loads(
-    r'''
+EXPECTED_DEFAULT_SCHEMAS = json.loads(r"""
 {
   "ff_analyze_draft_state": {
     "properties": {
@@ -535,8 +533,7 @@ EXPECTED_DEFAULT_SCHEMAS = json.loads(
     "type": "object"
   }
 }
-'''
-)
+""")
 
 EXPECTED_REDDIT_SCHEMA = {
     "type": "object",
@@ -555,7 +552,6 @@ EXPECTED_REDDIT_SCHEMA = {
     "required": ["players"],
 }
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-
 
 
 REDDIT_IMPORT_MODULES = ("src.services", "src.services.reddit_service", "praw", "textblob")
@@ -602,7 +598,9 @@ def _import_legacy_server(
         def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):  # type: ignore[no-untyped-def]
             if name in {"praw", "textblob", "src.services.reddit_service"}:
                 raise AssertionError(f"Reddit dependency imported while disabled: {name}")
-            if name == "src.services" and "analyze_reddit_sentiment" in (fromlist or ()):  # current eager path
+            if name == "src.services" and "analyze_reddit_sentiment" in (
+                fromlist or ()
+            ):  # current eager path
                 raise AssertionError("Reddit service imported while disabled: src.services")
             return real_import(name, globals, locals, fromlist, level)
 
@@ -659,10 +657,19 @@ async def test_enabled_stdio_adds_only_reddit_after_project_env_loading(monkeypa
 
     tools = await server_module.list_tools()
 
-    assert [tool.name for tool in tools] == EXPECTED_DEFAULT_TOOL_NAMES + [EXPECTED_REDDIT_TOOL_NAME]
-    assert {tool.name: tool.inputSchema for tool in tools if tool.name != EXPECTED_REDDIT_TOOL_NAME} == EXPECTED_DEFAULT_SCHEMAS
-    assert next(tool.inputSchema for tool in tools if tool.name == EXPECTED_REDDIT_TOOL_NAME) == EXPECTED_REDDIT_SCHEMA
-    assert set(server_module.TOOL_HANDLERS) == set(EXPECTED_DEFAULT_TOOL_NAMES + [EXPECTED_REDDIT_TOOL_NAME])
+    assert [tool.name for tool in tools] == EXPECTED_DEFAULT_TOOL_NAMES + [
+        EXPECTED_REDDIT_TOOL_NAME
+    ]
+    assert {
+        tool.name: tool.inputSchema for tool in tools if tool.name != EXPECTED_REDDIT_TOOL_NAME
+    } == EXPECTED_DEFAULT_SCHEMAS
+    assert (
+        next(tool.inputSchema for tool in tools if tool.name == EXPECTED_REDDIT_TOOL_NAME)
+        == EXPECTED_REDDIT_SCHEMA
+    )
+    assert set(server_module.TOOL_HANDLERS) == set(
+        EXPECTED_DEFAULT_TOOL_NAMES + [EXPECTED_REDDIT_TOOL_NAME]
+    )
 
 
 @pytest.mark.asyncio
@@ -671,7 +678,9 @@ async def test_enabled_reddit_dispatch_reaches_lazy_handler(monkeypatch):
 
     reddit_service = types.ModuleType("src.services.reddit_service")
 
-    async def analyze_reddit_sentiment(players: list[str], time_window_hours: int) -> dict[str, Any]:
+    async def analyze_reddit_sentiment(
+        players: list[str], time_window_hours: int
+    ) -> dict[str, Any]:
         return {
             "source": "fake-reddit-service",
             "players": players,
@@ -844,4 +853,6 @@ def test_fastmcp_enabled_registration_adds_only_reddit(monkeypatch):
 
     fastmcp_server = importlib.import_module("fastmcp_server")
 
-    assert set(fastmcp_server.server.tools) == set(EXPECTED_DEFAULT_TOOL_NAMES + [EXPECTED_REDDIT_TOOL_NAME])
+    assert set(fastmcp_server.server.tools) == set(
+        EXPECTED_DEFAULT_TOOL_NAMES + [EXPECTED_REDDIT_TOOL_NAME]
+    )

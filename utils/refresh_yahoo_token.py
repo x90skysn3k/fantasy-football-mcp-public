@@ -4,7 +4,6 @@ Refresh Yahoo Fantasy Sports OAuth2 Token.
 """
 
 import os
-from pathlib import Path
 
 import requests
 
@@ -50,7 +49,9 @@ def refresh_yahoo_token():
             access_token = token_data.get("access_token")
             new_refresh_token = token_data.get("refresh_token", refresh_token)
             expires_in = int(token_data.get("expires_in", 3600))
-            persist_yahoo_tokens(access_token, new_refresh_token, expires_in, env_path=ENV_FILE_PATH)
+            persist_yahoo_tokens(
+                access_token, new_refresh_token, expires_in, env_path=ENV_FILE_PATH
+            )
             print("Token refreshed successfully and saved to the project .env file.")
             return True
 
@@ -61,8 +62,6 @@ def refresh_yahoo_token():
     except Exception:
         print("Error refreshing token. Reauthorize if this persists.")
         return False
-
-
 
 
 def test_new_token():

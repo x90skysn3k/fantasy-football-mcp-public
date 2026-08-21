@@ -52,8 +52,7 @@ def game(game_key, code, season, leagues=None):
 
 def leagues(*league_dicts):
     league_entries = {
-        str(index): {"league": [[league_dict]]}
-        for index, league_dict in enumerate(league_dicts)
+        str(index): {"league": [[league_dict]]} for index, league_dict in enumerate(league_dicts)
     }
     league_entries["count"] = len(league_dicts)
     return league_entries
@@ -68,12 +67,12 @@ async def test_discover_nfl_game_selects_nfl_by_code_from_nonzero_key():
         game("933", "nfl", "2026"),
     )
 
-    with patch("fantasy_football_multi_league.yahoo_api_call", AsyncMock(return_value=response)) as mock_api:
+    with patch(
+        "fantasy_football_multi_league.yahoo_api_call", AsyncMock(return_value=response)
+    ) as mock_api:
         result = await discover_nfl_game()
 
-    mock_api.assert_awaited_once_with(
-        "users;use_login=1/games;game_keys=nfl", use_cache=False
-    )
+    mock_api.assert_awaited_once_with("users;use_login=1/games;game_keys=nfl", use_cache=False)
     assert result == {"game_key": "933", "season": 2026, "code": "nfl"}
 
 
@@ -285,9 +284,7 @@ async def test_sleeper_current_season_delegates_to_resolver_with_state_metadata(
 
 
 def test_setup_uses_current_nfl_metadata_opaque_game_key(monkeypatch, tmp_path):
-    module_path = (
-        Path(__file__).resolve().parents[2] / "utils" / "setup_yahoo_auth.py"
-    )
+    module_path = Path(__file__).resolve().parents[2] / "utils" / "setup_yahoo_auth.py"
 
     class FakeYahooFantasySportsQuery:
         init_kwargs = None
@@ -326,6 +323,7 @@ def test_setup_uses_current_nfl_metadata_opaque_game_key(monkeypatch, tmp_path):
                 "backoff": backoff,
                 "offline": offline,
             }
+
         def get_current_game_metadata(self):
             return SimpleNamespace(code="nfl", game_key="933")
 

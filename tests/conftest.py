@@ -1,7 +1,5 @@
 """Pytest configuration and shared fixtures for all tests."""
 
-import json
-import os
 from typing import Any, Dict
 from unittest.mock import AsyncMock, MagicMock
 

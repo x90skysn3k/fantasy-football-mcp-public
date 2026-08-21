@@ -3,12 +3,12 @@
 import os
 import tempfile
 import time
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable, Optional, Tuple
-
-from filelock import FileLock
+from typing import Optional, Tuple
 
 from dotenv import load_dotenv
+from filelock import FileLock
 
 PROJECT_ENV_PATH = Path(__file__).resolve().parents[2] / ".env"
 _ACCESS_FORM_URL = "https://sports.yahoo.com/developer/access/"
@@ -110,7 +110,9 @@ def _mutate_yahoo_env(env_path: Path, replacements: dict[str, str]) -> None:
         return
     unexpected_keys = set(replacements) - _YAHOO_MUTATION_KEYS
     if unexpected_keys:
-        raise YahooCredentialError("Unsupported Yahoo credential fields: " + ", ".join(sorted(unexpected_keys)))
+        raise YahooCredentialError(
+            "Unsupported Yahoo credential fields: " + ", ".join(sorted(unexpected_keys))
+        )
 
     env_path.parent.mkdir(parents=True, exist_ok=True)
     lock_path = env_path.with_name(f"{env_path.name}.lock")
@@ -184,7 +186,6 @@ def _fsync_directory(path: Path) -> None:
         pass
     finally:
         os.close(dir_fd)
-
 
 
 def _env_line_key(line: str) -> Optional[str]:

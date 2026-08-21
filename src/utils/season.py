@@ -1,7 +1,8 @@
 """Fantasy season resolution helpers."""
 
 import os
-from typing import Any, Mapping, Optional
+from collections.abc import Mapping
+from typing import Any, Optional
 
 DEFAULT_FANTASY_SEASON = 2026
 MIN_SUPPORTED_SEASON = 2020

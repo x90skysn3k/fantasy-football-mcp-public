@@ -96,7 +96,7 @@ async def handle_ff_get_players(arguments: dict) -> dict:
         return result
 
     try:
-        from lineup_optimizer import lineup_optimizer, Player
+        from lineup_optimizer import Player, lineup_optimizer
     except ImportError as exc:
         result["note"] = f"Enhanced data unavailable: {exc}"
         return result
@@ -175,7 +175,7 @@ async def handle_ff_get_players(arguments: dict) -> dict:
                     # Adjust analysis for bye weeks
                     if player.on_bye:
                         base["free_agent_value"] = 0.0
-                        base["analysis"] = f"ON BYE - Do not add this week"
+                        base["analysis"] = "ON BYE - Do not add this week"
                     else:
                         base["free_agent_value"] = round(proj * (1 - owned / 100), 1)
                         analysis_parts = [f"Low ownership ({owned}%), proj ({proj:.1f})"]
@@ -351,7 +351,7 @@ async def handle_ff_get_waiver_wire(arguments: dict) -> dict:
         return result
 
     try:
-        from lineup_optimizer import lineup_optimizer, Player
+        from lineup_optimizer import Player, lineup_optimizer
         from sleeper_api import get_trending_adds, sleeper_client
     except ImportError as exc:
         result["note"] = f"Enhanced data unavailable: {exc}"
@@ -384,7 +384,7 @@ async def handle_ff_get_waiver_wire(arguments: dict) -> dict:
                         player.expert_tier = "Depth"
                         player.expert_recommendation = "Monitor"
                         player.expert_confidence = 50
-                        player.expert_advice = f"Expert analysis unavailable"
+                        player.expert_advice = "Expert analysis unavailable"
 
             # Fetch and merge trending data
             trending = await get_trending_adds(count)

@@ -7,31 +7,26 @@ and intelligent caching through the cache manager.
 """
 
 import asyncio
-import json
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Union, Tuple
+import hashlib
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from enum import Enum
 from pathlib import Path
-import hashlib
-import time
+from typing import Any, Dict, List, Optional
 
 import aiohttp
 from loguru import logger
 from yfpy import YahooFantasySportsQuery
-from yfpy.models import Game, League, Team, Player as YfpyPlayer, Roster, Matchup
+from yfpy.models import Player as YfpyPlayer
 
 from config.settings import Settings
+
 from ..models.player import (
-    Player,
     Position,
-    Team as NFLTeam,
-    InjuryReport,
-    InjuryStatus,
-    PlayerStats,
 )
-from ..models.matchup import Matchup as FantasyMatchup, GameStatus
-from ..models.lineup import Lineup
+from ..models.player import (
+    Team as NFLTeam,
+)
 from .cache_manager import CacheManagerAgent
 
 # Find project root (where .env file is located)

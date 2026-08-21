@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Re-authenticate Yahoo Fantasy Sports tokens."""
 
-import os
 import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlparse
@@ -87,7 +86,9 @@ def reauth_yahoo():
         "response_type": "code",
         "language": "en-us",
     }
-    auth_url_full = auth_url + "?" + "&".join([f"{key}={value}" for key, value in auth_params.items()])
+    auth_url_full = (
+        auth_url + "?" + "&".join([f"{key}={value}" for key, value in auth_params.items()])
+    )
 
     print("🔗 Opening browser for Yahoo login...")
     print()

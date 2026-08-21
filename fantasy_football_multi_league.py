@@ -6,7 +6,10 @@ Fantasy Football MCP Server - Multi-League Support
 import asyncio
 import json
 import os
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from collections.abc import Awaitable
+
+# Import all handlers from the handlers module
+from typing import Any, Callable, Optional
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
@@ -15,23 +18,16 @@ from mcp.types import TextContent, Tool
 # Import extracted modules
 from src.api import (
     PROJECT_ENV_PATH,
-    get_access_token,
     load_project_environment,
-    refresh_yahoo_token,
     set_access_token,
     yahoo_api_call,
 )
-from src.parsers import parse_team_roster, parse_yahoo_free_agent_players
 
 # Import rate limiting and caching utilities
-from src.api.yahoo_utils import rate_limiter, response_cache
+from src.parsers import parse_team_roster, parse_yahoo_free_agent_players
 
 # Import bye week utilities
-from src.utils.bye_weeks import get_bye_week_with_fallback
 from src.utils.season import resolve_fantasy_season
-
-# Import all handlers from the handlers module
-from pathlib import Path
 
 PROJECT_ROOT = PROJECT_ENV_PATH.parent
 ENV_FILE_PATH = PROJECT_ENV_PATH
@@ -317,6 +313,7 @@ async def get_user_team_key(league_key: Optional[str]) -> Optional[str]:
     team_info = await get_user_team_info(league_key)
     return team_info["team_key"] if team_info else None
 
+
 async def _resolve_league_season(league_key: Optional[str]) -> int:
     """Resolve the active fantasy season for league-scoped Yahoo parsing."""
     if league_key:
@@ -327,7 +324,6 @@ async def _resolve_league_season(league_key: Optional[str]) -> int:
 
     nfl_game = await discover_nfl_game()
     return nfl_game["season"]
-
 
 
 async def get_waiver_wire_players(
@@ -343,9 +339,7 @@ async def get_waiver_wire_players(
         "trending": "A",
     }.get(sort, "OR")
 
-    endpoint = (
-        f"league/{league_key}/players;status=A{pos_filter};sort={sort_type};count={count}"
-    )
+    endpoint = f"league/{league_key}/players;status=A{pos_filter};sort={sort_type};count={count}"
     data = await yahoo_api_call(endpoint)
     players = parse_yahoo_free_agent_players(data, season=season)
 
@@ -1137,10 +1131,10 @@ async def main():
     async with stdio_server() as (read_stream, write_stream):
         await server.run(read_stream, write_stream, server.create_initialization_options())
 
+
 def cli_main() -> None:
     """Synchronous console-script entry point for the stdio MCP server."""
     asyncio.run(main())
-
 
 
 if __name__ == "__main__":

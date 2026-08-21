@@ -9,8 +9,9 @@ results based purely on the roster data already returned by the legacy layer.
 """
 
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, List, Optional, Sequence
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -165,8 +166,6 @@ def _has_yahoo_roster_players(payload: Dict[str, Any]) -> bool:
             if isinstance(container, dict) and isinstance(container.get("players"), dict):
                 return True
     return False
-
-
 
 
 def _calculate_match_confidence(match_method: str) -> float:
@@ -392,10 +391,8 @@ class LineupOptimizer:
         match_analytics = MatchAnalytics()
 
         try:
-            from sleeper_api import sleeper_client
-
             # Get current season and week once for all players
-            from sleeper_api import get_current_season, get_current_week
+            from sleeper_api import get_current_season, get_current_week, sleeper_client
 
             current_season = await get_current_season()
             current_week = await get_current_week()

@@ -96,7 +96,9 @@ def exchange_verification_code_for_tokens(verification_code, client_id, client_s
         return None
 
 
-def update_env_file_with_tokens(access_token, refresh_token, env_file_path, guid=None, expires_in=3600):
+def update_env_file_with_tokens(
+    access_token, refresh_token, env_file_path, guid=None, expires_in=3600
+):
     """Persist OAuth tokens and optional GUID through the shared credential seam."""
     persist_yahoo_tokens(
         access_token,

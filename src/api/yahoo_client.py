@@ -5,10 +5,11 @@ import socket
 from typing import Dict
 
 import aiohttp
+
 from src.api.yahoo_credentials import (
+    YAHOO_PROVISIONING_MESSAGE,
     YahooCredentialError,
     YahooProvisioningError,
-    YAHOO_PROVISIONING_MESSAGE,
     get_yahoo_consumer_credentials,
     is_yahoo_provisioning_failure,
     is_yahoo_token_rejected,
@@ -22,7 +23,6 @@ load_project_environment()
 # Module-level token cache
 _YAHOO_ACCESS_TOKEN = os.getenv("YAHOO_ACCESS_TOKEN")
 YAHOO_API_BASE = "https://fantasysports.yahooapis.com/fantasy/v2"
-
 
 
 def get_access_token() -> str:
@@ -93,16 +93,22 @@ async def yahoo_api_call(
                         "Reauthorize Yahoo with utils/setup_yahoo_auth.py."
                     )
                 if retry_on_auth_fail:
-                    raise Exception(f"Yahoo API error {response.status}: {_safe_response_excerpt(text)}")
+                    raise Exception(
+                        f"Yahoo API error {response.status}: {_safe_response_excerpt(text)}"
+                    )
                 raise Exception("Yahoo API error 401 after token refresh")
             elif response.status == 403:
                 text = await response.text()
                 if _is_provisioning_failure(response.status, text):
                     raise YahooProvisioningError(YAHOO_PROVISIONING_MESSAGE)
-                raise Exception(f"Yahoo API error {response.status}: {_safe_response_excerpt(text)}")
+                raise Exception(
+                    f"Yahoo API error {response.status}: {_safe_response_excerpt(text)}"
+                )
             else:
                 text = await response.text()
-                raise Exception(f"Yahoo API error {response.status}: {_safe_response_excerpt(text)}")
+                raise Exception(
+                    f"Yahoo API error {response.status}: {_safe_response_excerpt(text)}"
+                )
 
 
 async def refresh_yahoo_token() -> Dict:

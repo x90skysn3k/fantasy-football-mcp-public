@@ -25,15 +25,19 @@ from datetime import datetime, timedelta
 from enum import Enum
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
-from typing import Dict, Optional, Tuple, Any, Callable
-from urllib.parse import urlencode, parse_qs
+from typing import Any, Callable, Dict, Optional, Tuple
+from urllib.parse import parse_qs, urlencode
 
 import aiohttp
 from loguru import logger
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from config.settings import Settings
-from src.api.yahoo_credentials import PROJECT_ENV_PATH, load_project_environment, persist_yahoo_tokens
+from src.api.yahoo_credentials import (
+    PROJECT_ENV_PATH,
+    load_project_environment,
+    persist_yahoo_tokens,
+)
 
 
 class AuthState(str, Enum):
@@ -90,11 +94,11 @@ class YahooInvalidGrantError(YahooAuthError):
 
     pass
 
+
 class YahooTokenPersistenceError(YahooAuthError):
     """Raised when refreshed Yahoo tokens cannot be saved durably."""
 
     pass
-
 
 
 class CallbackHandler(BaseHTTPRequestHandler):
@@ -120,8 +124,7 @@ class CallbackHandler(BaseHTTPRequestHandler):
                 self.send_response(200)
                 self.send_header("Content-type", "text/html")
                 self.end_headers()
-                self.wfile.write(
-                    b"""
+                self.wfile.write(b"""
                 <html>
                 <head><title>Yahoo Authentication</title></head>
                 <body>
@@ -130,14 +133,12 @@ class CallbackHandler(BaseHTTPRequestHandler):
                     <script>window.close();</script>
                 </body>
                 </html>
-                """
-                )
+                """)
             else:
                 self.send_response(400)
                 self.send_header("Content-type", "text/html")
                 self.end_headers()
-                self.wfile.write(
-                    f"""
+                self.wfile.write(f"""
                 <html>
                 <head><title>Yahoo Authentication Error</title></head>
                 <body>
@@ -146,8 +147,7 @@ class CallbackHandler(BaseHTTPRequestHandler):
                     <p>You can close this window.</p>
                 </body>
                 </html>
-                """.encode()
-                )
+                """.encode())
 
             # Notify the auth manager
             self.auth_callback(auth_code, error)
@@ -401,7 +401,9 @@ class YahooAuth:
             state = secrets.token_urlsafe(32)
             auth_url, _ = self.get_authorization_url(state=state, scopes=scopes)
 
-            logger.info("Open the Yahoo authorization page in a browser to authorize the application.")
+            logger.info(
+                "Open the Yahoo authorization page in a browser to authorize the application."
+            )
 
             if auto_open_browser:
                 try:
@@ -790,7 +792,7 @@ if __name__ == "__main__":
                 url = f"{auth.YAHOO_API_BASE}/users;use_login=1"
                 async with session.get(url) as response:
                     if response.status == 200:
-                        print(f"✅ Authenticated API request successful!")
+                        print("✅ Authenticated API request successful!")
                         data = await response.text()
                         print(f"   Response length: {len(data)} characters")
                     else:

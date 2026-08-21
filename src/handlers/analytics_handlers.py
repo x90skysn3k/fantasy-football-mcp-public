@@ -1,7 +1,6 @@
 """Analytics MCP tool handlers."""
 
 
-
 async def handle_ff_analyze_reddit_sentiment(arguments: dict) -> dict:
     """Analyze Reddit sentiment for specified players.
 

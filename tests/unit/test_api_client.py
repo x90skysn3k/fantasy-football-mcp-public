@@ -1,7 +1,7 @@
 """Unit tests for src/api/yahoo_client.py - Yahoo API client functionality."""
 
 import os
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -158,7 +158,10 @@ class TestYahooApiCall:
         "status, body",
         [
             (401, 'oauth_problem="additional_authorization_required"'),
-            (403, '{"error":{"description":"This application is not authorized to perform this action."}}'),
+            (
+                403,
+                '{"error":{"description":"This application is not authorized to perform this action."}}',
+            ),
         ],
     )
     @pytest.mark.asyncio
@@ -190,7 +193,9 @@ class TestYahooApiCall:
     ):
         """A rejected access token with failed refresh tells the user to reauthorize safely."""
         sentinel = "sentinel-refresh-secret-must-not-leak"
-        session = MockSession(get_responses=[MockResponse(401, text='oauth_problem="token_rejected"')])
+        session = MockSession(
+            get_responses=[MockResponse(401, text='oauth_problem="token_rejected"')]
+        )
         refresh = AsyncMock(
             return_value={
                 "status": "error",
@@ -242,7 +247,10 @@ class TestYahooApiCall:
 
     @pytest.mark.parametrize(
         "body",
-        ['oauth_problem="invalid_scope"', '{"message":"token_rejected appears outside oauth_problem"}'],
+        [
+            'oauth_problem="invalid_scope"',
+            '{"message":"token_rejected appears outside oauth_problem"}',
+        ],
     )
     @pytest.mark.asyncio
     async def test_unknown_401_does_not_refresh(

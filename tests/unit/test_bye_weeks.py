@@ -6,8 +6,9 @@ This test module verifies the bye week fixes implemented in:
 - src/services/player_enhancement.py (detect_bye_week)
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from src.parsers.yahoo_parsers import parse_yahoo_free_agent_players
 from src.services.player_enhancement import detect_bye_week, enhance_player_with_context
@@ -512,7 +513,9 @@ class TestMainFunctionsByeWeeks:
                 "fantasy_football_multi_league._resolve_league_season",
                 AsyncMock(side_effect=season_error),
             ),
-            patch("fantasy_football_multi_league.yahoo_api_call", new_callable=AsyncMock) as mock_api,
+            patch(
+                "fantasy_football_multi_league.yahoo_api_call", new_callable=AsyncMock
+            ) as mock_api,
         ):
             with pytest.raises(RuntimeError, match="malformed season"):
                 await get_waiver_wire_players("461.l.61410")
@@ -530,7 +533,9 @@ class TestMainFunctionsByeWeeks:
                 "fantasy_football_multi_league._resolve_league_season",
                 AsyncMock(side_effect=season_error),
             ),
-            patch("fantasy_football_multi_league.yahoo_api_call", new_callable=AsyncMock) as mock_api,
+            patch(
+                "fantasy_football_multi_league.yahoo_api_call", new_callable=AsyncMock
+            ) as mock_api,
         ):
             with pytest.raises(ValueError, match="Unsupported fantasy season"):
                 await get_draft_rankings(league_key="461.l.61410")
@@ -540,11 +545,11 @@ class TestMainFunctionsByeWeeks:
     @pytest.mark.asyncio
     async def test_get_waiver_wire_players_bye_week_extraction(self):
         """Test that get_waiver_wire_players correctly extracts and validates bye weeks.
-        
+
         Now with static fallback: invalid API data falls back to static 2026 bye weeks.
         """
         from fantasy_football_multi_league import get_waiver_wire_players
-        
+
         mock_response = {
             "fantasy_content": {
                 "league": [
@@ -597,17 +602,18 @@ class TestMainFunctionsByeWeeks:
         }
 
         with (
-            patch("fantasy_football_multi_league.yahoo_api_call", new_callable=AsyncMock) as mock_api,
-            patch("fantasy_football_multi_league.discover_nfl_game", new_callable=AsyncMock) as mock_game,
+            patch(
+                "fantasy_football_multi_league.yahoo_api_call", new_callable=AsyncMock
+            ) as mock_api,
+            patch(
+                "fantasy_football_multi_league.discover_nfl_game", new_callable=AsyncMock
+            ) as mock_game,
         ):
             mock_api.return_value = mock_response
             mock_game.return_value = {"game_key": "461", "season": 2026, "code": "nfl"}
-            
+
             result = await get_waiver_wire_players(
-                league_key="461.l.61410",
-                position="all",
-                sort="rank",
-                count=30
+                league_key="461.l.61410", position="all", sort="rank", count=30
             )
 
             assert len(result) == 3
@@ -619,11 +625,11 @@ class TestMainFunctionsByeWeeks:
     @pytest.mark.asyncio
     async def test_get_draft_rankings_bye_week_validation(self):
         """Test that get_draft_rankings validates bye weeks correctly.
-        
+
         Now with static fallback: invalid API data falls back to static 2026 bye weeks.
         """
         from fantasy_football_multi_league import get_draft_rankings
-        
+
         mock_response = {
             "fantasy_content": {
                 "league": [
@@ -662,17 +668,17 @@ class TestMainFunctionsByeWeeks:
         }
 
         with (
-            patch("fantasy_football_multi_league.yahoo_api_call", new_callable=AsyncMock) as mock_api,
-            patch("fantasy_football_multi_league.discover_nfl_game", new_callable=AsyncMock) as mock_game,
+            patch(
+                "fantasy_football_multi_league.yahoo_api_call", new_callable=AsyncMock
+            ) as mock_api,
+            patch(
+                "fantasy_football_multi_league.discover_nfl_game", new_callable=AsyncMock
+            ) as mock_game,
         ):
             mock_api.return_value = mock_response
             mock_game.return_value = {"game_key": "461", "season": 2026, "code": "nfl"}
 
-            result = await get_draft_rankings(
-                league_key="461.l.61410",
-                position="all",
-                count=50
-            )
+            result = await get_draft_rankings(league_key="461.l.61410", position="all", count=50)
 
             assert len(result) == 2
             assert result[0]["bye"] == 10  # Valid API bye week used

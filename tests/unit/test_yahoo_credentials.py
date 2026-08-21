@@ -60,7 +60,9 @@ def test_consumer_credentials_require_canonical_names(monkeypatch):
     assert "legacy-secret" not in message
 
 
-def test_persist_yahoo_tokens_is_atomic_mode_0600_and_preserves_unrelated_lines(tmp_path, monkeypatch):
+def test_persist_yahoo_tokens_is_atomic_mode_0600_and_preserves_unrelated_lines(
+    tmp_path, monkeypatch
+):
     env_path = tmp_path / ".env"
     env_path.write_text(
         "# keep this comment\n"
@@ -118,7 +120,9 @@ def test_persist_yahoo_tokens_adds_missing_token_fields(tmp_path, monkeypatch):
     )
 
 
-def test_credential_errors_and_output_do_not_include_token_values(tmp_path, capsys, caplog, monkeypatch):
+def test_credential_errors_and_output_do_not_include_token_values(
+    tmp_path, capsys, caplog, monkeypatch
+):
     sentinel_access = "sentinel-access-token-that-must-not-leak"
     sentinel_refresh = "sentinel-refresh-token-that-must-not-leak"
     monkeypatch.setenv("YAHOO_ACCESS_TOKEN", sentinel_access)

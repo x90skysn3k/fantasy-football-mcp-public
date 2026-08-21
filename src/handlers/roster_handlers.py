@@ -105,7 +105,7 @@ async def handle_ff_get_roster(arguments: dict) -> dict:
         return result
 
     try:
-        from lineup_optimizer import lineup_optimizer, Player
+        from lineup_optimizer import Player, lineup_optimizer
     except ImportError as exc:
         result["note"] = f"Enhanced view unavailable: {exc}"
         return result
@@ -125,8 +125,7 @@ async def handle_ff_get_roster(arguments: dict) -> dict:
         return result
 
     logger = logging.getLogger(__name__)
-    
-    
+
     def serialize_player(player: Player) -> Dict[str, Any]:
         base = {
             "name": player.name,

@@ -71,7 +71,9 @@ def _validate_static_bye_weeks(season: int, bye_weeks: object) -> Dict[str, int]
             details.append(f"missing teams: {', '.join(missing)}")
         if extra:
             details.append(f"unexpected teams: {', '.join(extra)}")
-        raise ValueError(f"Static bye week data for {season} has invalid team keys ({'; '.join(details)})")
+        raise ValueError(
+            f"Static bye week data for {season} has invalid team keys ({'; '.join(details)})"
+        )
 
     validated: Dict[str, int] = {}
     for team, week in bye_weeks.items():

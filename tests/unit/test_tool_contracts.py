@@ -11,7 +11,6 @@ import pytest
 
 from src.handlers import draft_handlers, matchup_handlers, player_handlers, roster_handlers
 
-
 LEAGUE_KEY = "461.l.61410"
 TEAM_KEY = "461.l.61410.t.1"
 
@@ -187,7 +186,9 @@ class FakePlayer:
 
 
 class FakeLineupOptimizer:
-    async def parse_yahoo_roster(self, roster_data: dict[str, Any], season: int) -> list[FakePlayer]:
+    async def parse_yahoo_roster(
+        self, roster_data: dict[str, Any], season: int
+    ) -> list[FakePlayer]:
         assert roster_data == {"fantasy_content": {"team": []}}
         assert season == 2026
         return [FakePlayer("Starter", "QB", "BUF"), FakePlayer("Bench", "RB", "SF")]

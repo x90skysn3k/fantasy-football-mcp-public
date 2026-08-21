@@ -1,7 +1,5 @@
 """Unit tests for src/parsers/yahoo_parsers.py - Yahoo API response parsing."""
 
-import pytest
-
 from src.parsers.yahoo_parsers import parse_team_roster, parse_yahoo_free_agent_players
 
 
