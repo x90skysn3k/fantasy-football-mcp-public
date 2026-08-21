@@ -35,9 +35,9 @@
 - Resolved `TASK4-DEAD-COMPATIBILITY-SHIMS`: removed the dead `update_env_file` and `update_claude_config` refresh utility APIs rather than retaining no-op compatibility surfaces.
 
 ### Review-fix TDD / Verification
-- RED: `.venv/bin/python -m pytest tests/unit/test_yahoo_credentials.py tests/unit/test_api_client.py -q` failed after the arbitrary-401 parameterization exposed an undefined test `refresh` mock; the stricter `"token_rejected"` body case also defined the intended no-refresh regression.
-- GREEN: `.venv/bin/python -m pytest tests/unit/test_yahoo_credentials.py tests/unit/test_api_client.py -q` -> `25 passed`.
-- Compile check: `.venv/bin/python -m py_compile src/api/yahoo_credentials.py src/api/yahoo_client.py src/api/__init__.py config/settings.py fantasy_football_multi_league.py utils/setup_yahoo_auth.py utils/reauth_yahoo.py utils/refresh_yahoo_token.py utils/verify_setup.py src/agents/yahoo_auth.py tests/unit/test_yahoo_credentials.py tests/unit/test_api_client.py tests/unit/test_league_discovery.py tests/unit/test_yahoo_review_fixes.py` -> exit 0.
+- RED: `.venv/bin/python -m pytest tests/unit/test_yahoo_credentials.py tests/unit/test_api_client.py tests/unit/test_yahoo_review_fixes.py -q` failed with 11 review-regression failures after adding the focused regressions; a later stricter arbitrary-401 parameter confirmed refresh is not triggered by a non-`oauth_problem` `token_rejected` substring.
+- GREEN: `.venv/bin/python -m pytest tests/unit/test_yahoo_credentials.py tests/unit/test_api_client.py tests/unit/test_yahoo_review_fixes.py tests/unit/test_league_discovery.py -q` -> `45 passed` (the earlier combined run before the stricter extra parameter was `44 passed`).
+- Compile check: `.venv/bin/python -m py_compile src/api/yahoo_credentials.py src/api/yahoo_client.py src/api/__init__.py config/settings.py src/agents/yahoo_auth.py utils/setup_yahoo_auth.py utils/reauth_yahoo.py utils/refresh_yahoo_token.py utils/verify_setup.py tests/unit/test_yahoo_credentials.py tests/unit/test_api_client.py tests/unit/test_yahoo_review_fixes.py tests/unit/test_league_discovery.py` -> exit 0.
 
 ### Review-fix self-review
 - Grep review confirmed active config/deployment/verify surfaces use canonical Yahoo environment names; remaining `YAHOO_CLIENT_ID` / `YAHOO_CLIENT_SECRET` references are third-party `yfpy` constructor keyword names or negative legacy-name tests.
