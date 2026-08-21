@@ -1,6 +1,5 @@
 """Analytics MCP tool handlers."""
 
-from src.services import analyze_reddit_sentiment
 
 
 async def handle_ff_analyze_reddit_sentiment(arguments: dict) -> dict:
@@ -19,5 +18,7 @@ async def handle_ff_analyze_reddit_sentiment(arguments: dict) -> dict:
 
     if not players:
         return {"error": "No players specified for sentiment analysis"}
+
+    from src.services.reddit_service import analyze_reddit_sentiment
 
     return await analyze_reddit_sentiment(players, time_window)

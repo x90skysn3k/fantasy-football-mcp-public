@@ -22,7 +22,6 @@ from src.api import (
     yahoo_api_call,
 )
 from src.parsers import parse_team_roster, parse_yahoo_free_agent_players
-from src.services import analyze_reddit_sentiment
 
 # Import rate limiting and caching utilities
 from src.api.yahoo_utils import rate_limiter, response_cache
@@ -39,7 +38,6 @@ ENV_FILE_PATH = PROJECT_ENV_PATH
 
 from src.handlers import (
     handle_ff_analyze_draft_state,
-    handle_ff_analyze_reddit_sentiment,
     handle_ff_build_lineup,
     handle_ff_clear_cache,
     handle_ff_compare_teams,
@@ -67,6 +65,13 @@ from src.handlers import (
 DRAFT_AVAILABLE = True
 
 load_project_environment()
+
+ENABLE_REDDIT_SENTIMENT = os.getenv("ENABLE_REDDIT_SENTIMENT", "").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 
 # Initialize access token in the API module
 if os.getenv("YAHOO_ACCESS_TOKEN"):
@@ -785,7 +790,7 @@ async def list_tools() -> list[Tool]:
         draft_tools = [
             Tool(
                 name="ff_get_draft_recommendation",
-                description="Get AI-powered draft recommendations for live fantasy football drafts",
+                description="Get draft recommendations for live fantasy football drafts",
                 inputSchema={
                     "type": "object",
                     "properties": {
@@ -834,27 +839,30 @@ async def list_tools() -> list[Tool]:
                     "required": ["league_key"],
                 },
             ),
-            Tool(
-                name="ff_analyze_reddit_sentiment",
-                description="Analyze Reddit sentiment for fantasy football players to help with Start/Sit decisions",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "players": {
-                            "type": "array",
-                            "items": {"type": "string"},
-                            "description": "List of player names to analyze (e.g., ['Josh Allen', 'Jared Goff'])",
-                        },
-                        "time_window_hours": {
-                            "type": "integer",
-                            "description": "How far back to look for Reddit posts (default: 48 hours)",
-                            "default": 48,
-                        },
-                    },
-                    "required": ["players"],
-                },
-            ),
         ]
+        if ENABLE_REDDIT_SENTIMENT:
+            draft_tools.append(
+                Tool(
+                    name="ff_analyze_reddit_sentiment",
+                    description="Analyze Reddit sentiment for fantasy football players to help with Start/Sit decisions",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "players": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "List of player names to analyze (e.g., ['Josh Allen', 'Jared Goff'])",
+                            },
+                            "time_window_hours": {
+                                "type": "integer",
+                                "description": "How far back to look for Reddit posts (default: 48 hours)",
+                                "default": 48,
+                            },
+                        },
+                        "required": ["players"],
+                    },
+                )
+            )
         return base_tools + draft_tools
 
     return base_tools
@@ -866,7 +874,6 @@ TOOL_HANDLERS: dict[str, Callable[[dict], Awaitable[dict]]] = {
     "ff_get_standings": handle_ff_get_standings,
     "ff_get_teams": handle_ff_get_teams,
     "ff_get_roster": handle_ff_get_roster,
-    "ff_get_roster_with_projections": handle_ff_get_roster,
     "ff_get_matchup": handle_ff_get_matchup,
     "ff_get_players": handle_ff_get_players,
     "ff_compare_teams": handle_ff_compare_teams,
@@ -879,8 +886,12 @@ TOOL_HANDLERS: dict[str, Callable[[dict], Awaitable[dict]]] = {
     "ff_get_draft_rankings": handle_ff_get_draft_rankings,
     "ff_get_draft_recommendation": handle_ff_get_draft_recommendation,
     "ff_analyze_draft_state": handle_ff_analyze_draft_state,
-    "ff_analyze_reddit_sentiment": handle_ff_analyze_reddit_sentiment,
 }
+
+if ENABLE_REDDIT_SENTIMENT:
+    from src.handlers import handle_ff_analyze_reddit_sentiment
+
+    TOOL_HANDLERS["ff_analyze_reddit_sentiment"] = handle_ff_analyze_reddit_sentiment
 
 
 @server.call_tool()
