@@ -108,12 +108,16 @@ class TestGetByeWeekWithFallback:
         assert get_bye_week_with_fallback("KC", api_bye_week=6, season=2026) == 6
         assert OFFICIAL_2026_BYES["KC"] == 5
 
+    def test_get_bye_week_returns_valid_api_data_without_static_dataset(self):
+        assert get_bye_week_with_fallback("KC", api_bye_week=7, season=2099) == 7
+
+
     @pytest.mark.parametrize("api_bye_week", [None, 0, 19, True, "7"])
     def test_get_bye_week_uses_static_when_api_data_is_absent_or_invalid(self, api_bye_week):
         assert get_bye_week_with_fallback("KC", api_bye_week=api_bye_week, season=2026) == 5
 
-    def test_get_bye_week_unknown_team_has_no_cross_season_or_api_fallback(self):
-        assert get_bye_week_with_fallback("XXX", api_bye_week=7, season=2026) is None
+    def test_get_bye_week_unknown_team_uses_valid_api_fallback(self):
+        assert get_bye_week_with_fallback("XXX", api_bye_week=7, season=2026) == 7
 
 
 class TestBuildTeamByeWeekMap:

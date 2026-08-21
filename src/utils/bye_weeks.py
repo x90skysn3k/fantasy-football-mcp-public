@@ -110,18 +110,19 @@ def get_bye_week_with_fallback(
     season: int,
 ) -> Optional[int]:
     """
-    Get bye week for a canonical team using API-first semantics.
+    Get bye week for a team using API-first semantics.
 
-    Valid API bye weeks are preferred. Static season data is used only when API
-    data is absent or invalid for a canonical team.
+    Valid API bye weeks are preferred without touching static data. Static
+    season data is used only when API data is absent or invalid for a canonical
+    team.
     """
+    if _is_valid_bye_week(api_bye_week):
+        return api_bye_week
+
     static_data = load_static_bye_weeks(season)
     if team_abbr not in static_data:
         logger.warning("No static bye week data found for unknown team %s in %s", team_abbr, season)
         return None
-
-    if _is_valid_bye_week(api_bye_week):
-        return api_bye_week
 
     return static_data[team_abbr]
 
