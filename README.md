@@ -6,10 +6,10 @@ Data provided by Yahoo Fantasy Sports. Use of Yahoo Fantasy Sports API data is s
 
 ## Current public setup
 
-- Python >=3.9 is required.
+- Python >=3.10 is required.
 - The project entrypoint from `pyproject.toml` is `fantasy-football-mcp`.
 - The stdio server script is `fantasy_football_multi_league.py`.
-- The project installs `mcp>=1.2.0,<2` for the stdio MCP server.
+- The project installs `mcp>=1.13.1,<1.14` for the stdio MCP server.
 - The default fantasy football season is 2026. Set `FANTASY_SEASON=2026` explicitly in `.env` for reproducible public setup.
 - Yahoo OAuth consumer credentials must use the canonical variable names `YAHOO_CONSUMER_KEY` and `YAHOO_CONSUMER_SECRET`.
 - Reddit sentiment is disabled by default. The Reddit tool is advertised only when `ENABLE_REDDIT_SENTIMENT` is set to `1`, `true`, or `yes`; successful use also requires the optional Reddit dependencies and credentials.

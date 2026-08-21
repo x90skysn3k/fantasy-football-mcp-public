@@ -1,6 +1,6 @@
 # Core MCP server dependencies
 fastmcp==2.12.3
-mcp>=1.2.0,<2
+mcp>=1.13.1,<1.14
 yfpy==17.0.0
 python-dotenv==1.1.1
 pydantic==2.11.9
@@ -13,7 +13,7 @@ aiocache==0.12.3
 
 # Data processing
 pandas==2.3.2
-numpy==2.3.3
+numpy==2.0.2
 
 # Logging and CLI helpers
 loguru==0.7.3

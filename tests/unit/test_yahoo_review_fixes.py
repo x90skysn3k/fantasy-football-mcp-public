@@ -296,6 +296,11 @@ def _yahoo_auth_settings(cache_dir):
     )
 
 
+def _new_yahoo_auth_without_project_tokens(yahoo_auth, cache_dir, monkeypatch):
+    monkeypatch.setattr(yahoo_auth.YahooAuth, "_load_tokens", lambda _self: None)
+    return yahoo_auth.YahooAuth(_yahoo_auth_settings(cache_dir))
+
+
 def test_yahoo_auth_persists_only_through_credential_seam_without_json_store(
     tmp_path, monkeypatch, capsys
 ):
@@ -311,7 +316,7 @@ def test_yahoo_auth_persists_only_through_credential_seam_without_json_store(
         ),
         raising=False,
     )
-    auth = yahoo_auth.YahooAuth(_yahoo_auth_settings(cache_dir))
+    auth = _new_yahoo_auth_without_project_tokens(yahoo_auth, cache_dir, monkeypatch)
     auth.tokens = yahoo_auth.YahooTokens(
         access_token="sentinel-access-token",
         refresh_token="sentinel-refresh-token",
@@ -329,7 +334,7 @@ def test_yahoo_auth_persists_only_through_credential_seam_without_json_store(
 
 def test_yahoo_auth_authenticate_reports_failure_when_persistence_fails(tmp_path, monkeypatch):
     yahoo_auth = _load_yahoo_auth_module()
-    auth = yahoo_auth.YahooAuth(_yahoo_auth_settings(tmp_path / "cache"))
+    auth = _new_yahoo_auth_without_project_tokens(yahoo_auth, tmp_path / "cache", monkeypatch)
     event = yahoo_auth.threading.Event()
     event.set()
     auth._auth_event = event
@@ -359,7 +364,7 @@ def test_yahoo_auth_authenticate_reports_failure_when_persistence_fails(tmp_path
 
 def test_yahoo_auth_refresh_reports_failure_when_persistence_fails(tmp_path, monkeypatch):
     yahoo_auth = _load_yahoo_auth_module()
-    auth = yahoo_auth.YahooAuth(_yahoo_auth_settings(tmp_path / "cache"))
+    auth = _new_yahoo_auth_without_project_tokens(yahoo_auth, tmp_path / "cache", monkeypatch)
     auth.tokens = yahoo_auth.YahooTokens(
         access_token="old-access",
         refresh_token="old-refresh",
@@ -395,7 +400,7 @@ def test_yahoo_auth_authenticate_propagates_expired_token_refresh_persistence_fa
     tmp_path, monkeypatch
 ):
     yahoo_auth = _load_yahoo_auth_module()
-    auth = yahoo_auth.YahooAuth(_yahoo_auth_settings(tmp_path / "cache"))
+    auth = _new_yahoo_auth_without_project_tokens(yahoo_auth, tmp_path / "cache", monkeypatch)
     auth.tokens = yahoo_auth.YahooTokens(
         access_token="old-access",
         refresh_token="old-refresh",
@@ -421,7 +426,7 @@ def test_yahoo_auth_authenticate_propagates_expired_token_refresh_persistence_fa
 def test_yahoo_auth_refresh_attempts_once_not_three_times(tmp_path, monkeypatch):
     yahoo_auth = _load_yahoo_auth_module()
 
-    auth = yahoo_auth.YahooAuth(_yahoo_auth_settings(tmp_path / "cache"))
+    auth = _new_yahoo_auth_without_project_tokens(yahoo_auth, tmp_path / "cache", monkeypatch)
     auth.tokens = yahoo_auth.YahooTokens(
         access_token="old-access",
         refresh_token="old-refresh",

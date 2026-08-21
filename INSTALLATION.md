@@ -6,7 +6,7 @@ Data provided by Yahoo Fantasy Sports. Use requires a Yahoo account, a Yahoo Dev
 
 ## Prerequisites
 
-- Python >=3.9
+- Python >=3.10
 - Git
 - A Yahoo Fantasy Sports account with 2026 fantasy football league access
 - A Yahoo Developer app from https://developer.yahoo.com/apps/
