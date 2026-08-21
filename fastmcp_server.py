@@ -9,12 +9,13 @@ This module wraps the existing Yahoo Fantasy Football tooling defined in
 
 import json
 import os
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import asdict, is_dataclass
-from typing import Any, Awaitable, Callable, Dict, Literal, Optional, Sequence, Union
+from typing import Any, Callable, Dict, Literal, Optional
 
 from fastmcp import Context, FastMCP
-from mcp.types import ContentBlock, TextContent
+from mcp.types import TextContent
+from src.api import refresh_yahoo_token
 
 import fantasy_football_multi_league
 
@@ -22,7 +23,7 @@ import fantasy_football_multi_league
 
 # Remove explicit typing to avoid type conflicts with evolving MCP types
 _legacy_call_tool = fantasy_football_multi_league.call_tool
-_legacy_refresh_token = fantasy_football_multi_league.refresh_yahoo_token
+_legacy_refresh_token = refresh_yahoo_token
 ENABLE_REDDIT_SENTIMENT = fantasy_football_multi_league.ENABLE_REDDIT_SENTIMENT
 
 _SERVER_INSTRUCTIONS = (
@@ -129,6 +130,7 @@ def _tool_meta(name: str) -> Dict[str, str]:
 
     return {"prompt": _TOOL_PROMPTS[name]}
 
+
 def _optional_reddit_tool(
     *,
     name: str,
@@ -174,12 +176,12 @@ async def _call_legacy_tool(
     def _coerce_text(block: Any) -> TextContent:
         if isinstance(block, TextContent):
             return block
-        if hasattr(block, "text") and isinstance(getattr(block, "text"), str):
-            return TextContent(type="text", text=getattr(block, "text"))
+        if hasattr(block, "text") and isinstance(block.text, str):
+            return TextContent(type="text", text=block.text)
         if is_dataclass(block) and not isinstance(block, type):
             return TextContent(type="text", text=json.dumps(asdict(block)))
         if hasattr(block, "data"):
-            data = getattr(block, "data")
+            data = block.data
             if isinstance(data, bytes):
                 try:
                     data = data.decode("utf-8")
@@ -288,6 +290,7 @@ async def ff_get_league_info(
         league_key=league_key,
     )
 
+
 @server.tool(
     name="ff_get_teams",
     description=(
@@ -298,7 +301,6 @@ async def ff_get_league_info(
 )
 async def ff_get_teams(ctx: Context, league_key: str) -> Dict[str, Any]:
     return await _call_legacy_tool("ff_get_teams", ctx=ctx, league_key=league_key)
-
 
 
 @server.tool(
@@ -831,8 +833,6 @@ async def ff_analyze_reddit_sentiment(
     )
 
 
-
-
 # ============================================================================
 # PROMPTS - Reusable message templates for better LLM interactions
 # ============================================================================
@@ -957,7 +957,7 @@ Analyze:
 Provide a week-by-week action plan."""
 
 
-@server.prompt  
+@server.prompt
 def playoff_preparation(league_key: str, team_key: str, current_week: int) -> str:
     """Generate a prompt for playoff preparation strategy."""
     return f"""Create a playoff preparation strategy for team {team_key} in league {league_key} (currently Week {current_week}).
@@ -975,7 +975,9 @@ Provide actionable recommendations to maximize playoff success."""
 
 
 @server.prompt
-def trade_proposal_generation(league_key: str, my_team_key: str, target_team_key: str, position_need: str) -> str:
+def trade_proposal_generation(
+    league_key: str, my_team_key: str, target_team_key: str, position_need: str
+) -> str:
     """Generate a prompt for creating fair trade proposals."""
     return f"""Generate fair trade proposals between my team ({my_team_key}) and {target_team_key} in league {league_key}.
 
@@ -993,7 +995,9 @@ For each proposal explain why it works for both teams."""
 
 
 @server.prompt
-def injury_replacement_strategy(league_key: str, injured_player: str, injury_length: str, position: str) -> str:
+def injury_replacement_strategy(
+    league_key: str, injured_player: str, injury_length: str, position: str
+) -> str:
     """Generate a prompt for injury replacement analysis."""
     return f"""My player {injured_player} ({position}) is injured for approximately {injury_length} in league {league_key}.
 
@@ -1028,7 +1032,9 @@ Rank options with confidence levels and reasoning."""
 
 
 @server.prompt
-def season_long_strategy_check(league_key: str, team_key: str, current_record: str, weeks_remaining: int) -> str:
+def season_long_strategy_check(
+    league_key: str, team_key: str, current_record: str, weeks_remaining: int
+) -> str:
     """Generate a prompt for comprehensive season strategy assessment."""
     return f"""Assess season-long strategy for team {team_key} in league {league_key}.
 
@@ -1772,7 +1778,7 @@ if ENABLE_REDDIT_SENTIMENT:
 
 # Optional resource: expose deployed commit SHA for diagnostics
 try:
-    with open(os.path.join(os.path.dirname(__file__), "COMMIT_SHA"), "r", encoding="utf-8") as _f:
+    with open(os.path.join(os.path.dirname(__file__), "COMMIT_SHA"), encoding="utf-8") as _f:
         _COMMIT_SHA = _f.read().strip()
 except Exception:  # pragma: no cover - best effort
     _COMMIT_SHA = "unknown"
@@ -1850,9 +1856,7 @@ def get_tool_selection_guide() -> str:
                 "competitive_analysis": [
                     "ff_get_league_info -> ff_get_standings -> ff_compare_teams -> ff_get_matchup"
                 ],
-                "player_research": [
-                    "ff_get_waiver_wire -> ff_get_players"
-                ],
+                "player_research": ["ff_get_waiver_wire -> ff_get_players"],
             },
             "decision_framework": {
                 "data_gathering": "Always start with league discovery and current roster state",
