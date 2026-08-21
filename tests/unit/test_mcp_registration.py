@@ -7,6 +7,8 @@ import importlib
 import json
 import os
 import sys
+import subprocess
+from pathlib import Path
 import types
 from typing import Any
 
@@ -552,6 +554,9 @@ EXPECTED_REDDIT_SCHEMA = {
     },
     "required": ["players"],
 }
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
 
 REDDIT_IMPORT_MODULES = ("src.services", "src.services.reddit_service", "praw", "textblob")
 
@@ -731,6 +736,91 @@ def _install_fastmcp_stub(monkeypatch: pytest.MonkeyPatch) -> type:
     return FastMCP
 
 
+def test_installed_console_entrypoint_invokes_canonical_gated_stdio_without_reddit(tmp_path):
+    install_target = tmp_path / "site"
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "--no-deps",
+            "--target",
+            str(install_target),
+            str(PROJECT_ROOT),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    probe = f"""
+import builtins
+import importlib.metadata
+import os
+import sys
+
+install_target = {str(install_target)!r}
+sys.path.insert(0, install_target)
+os.environ.pop("ENABLE_REDDIT_SENTIMENT", None)
+
+real_import = builtins.__import__
+
+def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
+    if name == "src.mcp_server":
+        raise AssertionError("console entrypoint imported noncanonical src.mcp_server")
+    if name in {{"praw", "textblob", "src.services.reddit_service"}}:
+        raise AssertionError(f"Reddit dependency imported while disabled: {{name}}")
+    if name == "src.services" and "analyze_reddit_sentiment" in (fromlist or ()):
+        raise AssertionError("Reddit service imported while disabled: src.services")
+    return real_import(name, globals, locals, fromlist, level)
+
+builtins.__import__ = guarded_import
+
+distributions = [
+    distribution
+    for distribution in importlib.metadata.distributions(path=[install_target])
+    if distribution.metadata["Name"] == "fantasy-football-mcp"
+]
+assert len(distributions) == 1
+entrypoints = [
+    entrypoint
+    for entrypoint in distributions[0].entry_points
+    if entrypoint.group == "console_scripts" and entrypoint.name == "fantasy-football-mcp"
+]
+assert len(entrypoints) == 1
+assert entrypoints[0].value == "fantasy_football_multi_league:cli_main"
+
+cli_main = entrypoints[0].load()
+module = sys.modules["fantasy_football_multi_league"]
+assert module.__file__.startswith(install_target)
+assert sys.modules["src.api"].__file__.startswith(install_target)
+calls = []
+
+async def fake_main():
+    calls.append("canonical-main")
+
+module.main = fake_main
+
+assert cli_main is module.cli_main
+assert cli_main() is None
+assert calls == ["canonical-main"]
+assert "src.mcp_server" not in sys.modules
+assert not any(
+    name in sys.modules
+    for name in ("src.services", "src.services.reddit_service", "praw", "textblob")
+)
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", probe],
+        cwd=tmp_path,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+
+
 def test_fastmcp_default_registration_uses_same_default_off_tool_set(monkeypatch):
     _clear_registration_modules()
     _patch_project_env_loader(monkeypatch, None)
@@ -740,6 +830,11 @@ def test_fastmcp_default_registration_uses_same_default_off_tool_set(monkeypatch
 
     assert set(fastmcp_server.server.tools) == set(EXPECTED_DEFAULT_TOOL_NAMES)
     assert EXPECTED_REDDIT_TOOL_NAME not in fastmcp_server.server.tools
+    matchup_tool = fastmcp_server.server.tools["ff_get_matchup"]
+    assert "Returns the raw Yahoo matchup payload" in matchup_tool["description"]
+    assert "raw Yahoo matchup payload" in matchup_tool["meta"]["prompt"]
+    assert "opponent" not in matchup_tool["meta"]["prompt"].lower()
+    assert "projection" not in matchup_tool["meta"]["prompt"].lower()
 
 
 def test_fastmcp_enabled_registration_adds_only_reddit(monkeypatch):

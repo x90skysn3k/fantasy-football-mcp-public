@@ -1137,6 +1137,11 @@ async def main():
     async with stdio_server() as (read_stream, write_stream):
         await server.run(read_stream, write_stream, server.create_initialization_options())
 
+def cli_main() -> None:
+    """Synchronous console-script entry point for the stdio MCP server."""
+    asyncio.run(main())
+
+
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    cli_main()

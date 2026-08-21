@@ -68,7 +68,8 @@ _TOOL_PROMPTS: Dict[str, str] = {
     ),
     "ff_get_matchup": (
         "🆚 Get weekly matchup for your team. "
-        "Parameters: league_key (required), week (optional). Returns opponent and projections."
+        "Parameters: league_key (required), week (optional). "
+        "Returns the raw Yahoo matchup payload for the selected week."
     ),
     "ff_get_players": (
         "Research free agents or player pools for waiver pickups by filtering "

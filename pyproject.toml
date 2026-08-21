@@ -62,7 +62,7 @@ dev = [
 ]
 
 [project.scripts]
-fantasy-football-mcp = "src.mcp_server:main"
+fantasy-football-mcp = "fantasy_football_multi_league:cli_main"
 
 [project.urls]
 Homepage = "https://github.com/yourusername/fantasy-football-mcp"
@@ -71,7 +71,10 @@ Repository = "https://github.com/yourusername/fantasy-football-mcp.git"
 Issues = "https://github.com/yourusername/fantasy-football-mcp/issues"
 
 [tool.setuptools]
-packages = ["src"]
+py-modules = ["fantasy_football_multi_league"]
+
+[tool.setuptools.packages.find]
+include = ["src", "src.*"]
 
 [tool.setuptools.package-data]
 src = ["data/*.json", "*.json", "*.yaml", "*.yml"]
