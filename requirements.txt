@@ -27,6 +27,7 @@ textblob==0.19.0
 requests==2.32.5
 yahoo-oauth==2.1.1
 stringcase==1.2.0
+filelock==3.16.1
 
 # Testing
 pytest==8.4.2

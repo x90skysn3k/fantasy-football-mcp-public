@@ -31,8 +31,8 @@ def check_env_file():
     load_dotenv(dotenv_path=env_path)
     
     required_vars = {
-        'YAHOO_CLIENT_ID': 'Your app client ID from Yahoo',
-        'YAHOO_CLIENT_SECRET': 'Your app client secret from Yahoo',
+        'YAHOO_CONSUMER_KEY': 'Your app consumer key from Yahoo',
+        'YAHOO_CONSUMER_SECRET': 'Your app consumer secret from Yahoo',
     }
     
     optional_vars = {
@@ -63,11 +63,7 @@ def check_env_file():
             print(f"   ⚠️  {var}: Not set (run setup_yahoo_auth.py)")
             missing_optional.append(var)
         else:
-            # Show partial value for verification
-            if var == 'YAHOO_GUID':
-                print(f"   ✅ {var}: {value}")
-            else:
-                print(f"   ✅ {var}: {value[:20]}... ({len(value)} chars)")
+            print(f"   ✅ {var}: Configured ({len(value)} chars)")
     
     if missing_required:
         print(f"\n   ❌ Missing required credentials: {', '.join(missing_required)}")
@@ -83,8 +79,8 @@ def check_yahoo_credentials():
     """Verify Yahoo credentials format"""
     print("\n2. Verifying credential format...")
     
-    client_id = os.getenv('YAHOO_CLIENT_ID', '')
-    client_secret = os.getenv('YAHOO_CLIENT_SECRET', '')
+    client_id = os.getenv('YAHOO_CONSUMER_KEY', '')
+    client_secret = os.getenv('YAHOO_CONSUMER_SECRET', '')
     
     issues = []
     

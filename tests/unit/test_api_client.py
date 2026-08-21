@@ -240,6 +240,26 @@ class TestYahooApiCall:
         assert len(session.get_calls) == 2
         refresh.assert_awaited_once()
 
+    @pytest.mark.asyncio
+    async def test_unknown_401_does_not_refresh(
+        self, mock_env_vars, mock_rate_limiter, mock_response_cache
+    ):
+        """Only oauth_problem=token_rejected triggers refresh; arbitrary 401s do not."""
+        session = MockSession(get_responses=[MockResponse(401, text='oauth_problem="invalid_scope"')])
+        refresh = AsyncMock(return_value={"status": "success"})
+
+        with (
+            patch("src.api.yahoo_client.rate_limiter", mock_rate_limiter),
+            patch("src.api.yahoo_client.response_cache", mock_response_cache),
+            patch("src.api.yahoo_client.refresh_yahoo_token", refresh),
+            patch("aiohttp.TCPConnector"),
+            patch("aiohttp.ClientSession", return_value=session),
+        ):
+            with pytest.raises(Exception, match="Yahoo API error 401"):
+                await yahoo_api_call("test/endpoint")
+
+        refresh.assert_not_awaited()
+
     @pytest.mark.parametrize("status", [429, 500, 503])
     @pytest.mark.asyncio
     async def test_operational_errors_do_not_refresh(

@@ -61,14 +61,6 @@ def refresh_yahoo_token():
         return False
 
 
-def update_env_file(access_token, refresh_token):
-    """Compatibility wrapper for older callers; persists through the token seam."""
-    persist_yahoo_tokens(access_token, refresh_token, 3600, env_path=ENV_FILE_PATH)
-
-
-def update_claude_config(access_token, refresh_token):
-    """Compatibility no-op: Yahoo tokens are no longer copied into MCP client configs."""
-    print("Tokens are stored only in the project .env file; MCP client configs were not modified.")
 
 
 def test_new_token():

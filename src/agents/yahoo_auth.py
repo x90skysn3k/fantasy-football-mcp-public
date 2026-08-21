@@ -15,7 +15,7 @@ Yahoo API peculiarities handled:
 import asyncio
 import base64
 import hashlib
-import json
+import os
 import secrets
 import threading
 import time
@@ -33,6 +33,7 @@ from loguru import logger
 from pydantic import BaseModel, Field
 
 from config.settings import Settings
+from src.api.yahoo_credentials import PROJECT_ENV_PATH, load_project_environment, persist_yahoo_tokens
 
 
 class AuthState(str, Enum):
@@ -178,7 +179,6 @@ class YahooAuth:
         settings: Settings,
         callback_host: str = "localhost",
         callback_port: int = 8080,
-        token_storage_path: Optional[Path] = None,
     ):
         """
         Initialize Yahoo authentication manager.
@@ -187,14 +187,10 @@ class YahooAuth:
             settings: Application settings with Yahoo credentials
             callback_host: Host for OAuth callback server
             callback_port: Port for OAuth callback server
-            token_storage_path: Path to store tokens (defaults to cache_dir/yahoo_tokens.json)
         """
         self.settings = settings
         self.callback_host = callback_host or getattr(settings, "yahoo_callback_host", "localhost")
         self.callback_port = callback_port or getattr(settings, "yahoo_callback_port", 8090)
-
-        # Token storage
-        self.token_storage_path = token_storage_path or settings.cache_dir / "yahoo_tokens.json"
 
         # Authentication state
         self.tokens: Optional[YahooTokens] = None
@@ -204,7 +200,7 @@ class YahooAuth:
         self._auth_result: Optional[Tuple[Optional[str], Optional[str]]] = None
 
         # Retry configuration
-        self.max_retries = 3
+        self.max_retries = 1
         self.retry_delay = 1.0  # seconds
 
         # Load existing tokens
@@ -227,52 +223,48 @@ class YahooAuth:
         )
 
     def _load_tokens(self) -> None:
-        """Load tokens from storage if available."""
-        if not self.token_storage_path.exists():
-            logger.debug("No stored tokens found")
+        """Load tokens from the checkout environment seam if available."""
+        load_project_environment()
+        access_token = os.getenv("YAHOO_ACCESS_TOKEN")
+        refresh_token = os.getenv("YAHOO_REFRESH_TOKEN")
+        if not access_token or not refresh_token:
+            logger.debug("No stored Yahoo tokens found in project environment")
             return
 
         try:
-            with open(self.token_storage_path, "r") as f:
-                token_data = json.load(f)
-
-            # Parse stored tokens
-            token_data["expires_at"] = datetime.fromisoformat(token_data["expires_at"])
-            self.tokens = YahooTokens(**token_data)
-
-            # Set auth state based on token validity
-            if self.tokens.is_expired:
-                self.auth_state = AuthState.TOKEN_EXPIRED
-                logger.info("Loaded expired tokens")
-            else:
-                self.auth_state = AuthState.AUTHENTICATED
-                logger.info(f"Loaded valid tokens (expires in {self.tokens.expires_in_seconds}s)")
-
-        except Exception as e:
-            logger.warning(f"Failed to load stored tokens: {e}")
-            self.tokens = None
-            self.auth_state = AuthState.UNAUTHENTICATED
+            token_time = int(os.getenv("YAHOO_TOKEN_TIME", "0") or "0")
+        except ValueError:
+            token_time = 0
+        expires_at = datetime.fromtimestamp(token_time) + timedelta(seconds=3600)
+        self.tokens = YahooTokens(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            token_type=os.getenv("YAHOO_TOKEN_TYPE", "Bearer"),
+            expires_at=expires_at,
+        )
+        if self.tokens.is_expired:
+            self.auth_state = AuthState.TOKEN_EXPIRED
+            logger.info("Loaded expired Yahoo tokens from project environment")
+        else:
+            self.auth_state = AuthState.AUTHENTICATED
+            logger.info(f"Loaded valid Yahoo tokens (expires in {self.tokens.expires_in_seconds}s)")
 
     def _save_tokens(self) -> None:
-        """Save tokens to storage."""
+        """Save tokens only through the shared checkout .env seam."""
         if not self.tokens:
             return
 
         try:
-            # Ensure directory exists
-            self.token_storage_path.parent.mkdir(parents=True, exist_ok=True)
-
-            # Serialize tokens
-            token_data = self.tokens.model_dump()
-            token_data["expires_at"] = self.tokens.expires_at.isoformat()
-
-            with open(self.token_storage_path, "w") as f:
-                json.dump(token_data, f, indent=2)
-
-            logger.debug("Tokens saved to storage")
-
-        except Exception as e:
-            logger.error(f"Failed to save tokens: {e}")
+            expires_in = max(1, self.tokens.expires_in_seconds)
+            persist_yahoo_tokens(
+                self.tokens.access_token,
+                self.tokens.refresh_token,
+                expires_in,
+                env_path=PROJECT_ENV_PATH,
+            )
+            logger.debug("Tokens saved through project environment seam")
+        except Exception:
+            logger.error("Failed to save Yahoo tokens")
 
     def _generate_pkce_challenge(self) -> Tuple[str, str]:
         """Generate PKCE code verifier and challenge for OAuth2."""
@@ -384,8 +376,8 @@ class YahooAuth:
         if self.tokens and self.auth_state == AuthState.TOKEN_EXPIRED:
             try:
                 return await self.refresh_tokens()
-            except Exception as e:
-                logger.warning(f"Token refresh failed, proceeding with new auth: {e}")
+            except Exception:
+                logger.warning("Token refresh failed, proceeding with new auth")
 
         self.auth_state = AuthState.PENDING_AUTHORIZATION
 
@@ -397,8 +389,7 @@ class YahooAuth:
             state = secrets.token_urlsafe(32)
             auth_url, _ = self.get_authorization_url(state=state, scopes=scopes)
 
-            logger.info(f"Please visit the following URL to authorize the application:")
-            logger.info(f"{auth_url}")
+            logger.info("Open the Yahoo authorization page in a browser to authorize the application.")
 
             if auto_open_browser:
                 try:
@@ -406,8 +397,8 @@ class YahooAuth:
 
                     webbrowser.open(auth_url)
                     logger.info("Browser opened automatically")
-                except Exception as e:
-                    logger.warning(f"Failed to open browser: {e}")
+                except Exception:
+                    logger.warning("Failed to open browser")
 
             # Wait for callback
             start_time = time.time()
@@ -425,7 +416,7 @@ class YahooAuth:
             auth_code, error = self._auth_result
 
             if error:
-                raise YahooAuthError(f"Authorization failed: {error}")
+                raise YahooAuthError("Authorization failed")
 
             if not auth_code:
                 raise YahooAuthError("No authorization code received")
@@ -487,13 +478,12 @@ class YahooAuth:
                         response_data = await response.json()
 
                         if response.status != 200:
-                            error_desc = response_data.get("error_description", "Unknown error")
                             error_code = response_data.get("error", "unknown_error")
 
                             if error_code == "invalid_grant":
-                                raise YahooInvalidGrantError(f"Invalid grant: {error_desc}")
+                                raise YahooInvalidGrantError("Invalid grant")
 
-                            raise YahooAuthError(f"Token exchange failed: {error_desc}")
+                            raise YahooAuthError("Token exchange failed")
 
                         # Parse token response
                         access_token = response_data["access_token"]
@@ -517,11 +507,11 @@ class YahooAuth:
 
             except YahooInvalidGrantError:
                 raise  # Don't retry invalid grant errors
-            except Exception as e:
+            except Exception:
                 if attempt == self.max_retries - 1:
-                    raise YahooAuthError(f"Failed to exchange code for tokens: {e}")
+                    raise YahooAuthError("Failed to exchange code for tokens")
 
-                logger.warning(f"Token exchange attempt {attempt + 1} failed: {e}")
+                logger.warning(f"Token exchange attempt {attempt + 1} failed")
                 await asyncio.sleep(self.retry_delay * (2**attempt))
 
         raise YahooAuthError("All token exchange attempts failed")
@@ -566,7 +556,6 @@ class YahooAuth:
                         response_data = await response.json()
 
                         if response.status != 200:
-                            error_desc = response_data.get("error_description", "Unknown error")
                             error_code = response_data.get("error", "unknown_error")
 
                             if error_code == "invalid_grant":
@@ -575,7 +564,7 @@ class YahooAuth:
                                     "Refresh token expired, re-authentication required"
                                 )
 
-                            raise YahooAuthError(f"Token refresh failed: {error_desc}")
+                            raise YahooAuthError("Token refresh failed")
 
                         # Update tokens
                         access_token = response_data["access_token"]
@@ -604,12 +593,12 @@ class YahooAuth:
 
             except YahooTokenExpiredError:
                 raise  # Don't retry refresh token expired errors
-            except Exception as e:
+            except Exception:
                 if attempt == self.max_retries - 1:
                     self.auth_state = AuthState.REFRESH_FAILED
-                    raise YahooTokenExpiredError(f"Failed to refresh tokens: {e}")
+                    raise YahooTokenExpiredError("Failed to refresh tokens")
 
-                logger.warning(f"Token refresh attempt {attempt + 1} failed: {e}")
+                logger.warning(f"Token refresh attempt {attempt + 1} failed")
                 await asyncio.sleep(self.retry_delay * (2**attempt))
 
         self.auth_state = AuthState.REFRESH_FAILED
@@ -676,20 +665,14 @@ class YahooAuth:
 
     def revoke_tokens(self) -> None:
         """
-        Revoke stored tokens and clear authentication state.
+        Clear in-memory authentication state.
 
-        This doesn't make an API call to Yahoo but clears local state.
+        This does not remove checkout .env values; token persistence is owned by
+        the shared credential seam.
         """
         self.tokens = None
         self.auth_state = AuthState.UNAUTHENTICATED
-
-        # Remove stored tokens
-        if self.token_storage_path.exists():
-            try:
-                self.token_storage_path.unlink()
-                logger.info("Stored tokens removed")
-            except Exception as e:
-                logger.warning(f"Failed to remove stored tokens: {e}")
+        logger.info("Yahoo authentication state cleared")
 
     def get_status(self) -> Dict[str, Any]:
         """
@@ -778,12 +761,10 @@ if __name__ == "__main__":
         if not auth.is_authenticated:
             print("\nStarting authentication flow...")
             try:
-                tokens = await auth.authenticate(timeout=300)
-                print(f"✅ Authentication successful!")
-                print(f"   Access token: {tokens.access_token[:20]}...")
-                print(f"   Expires at: {tokens.expires_at}")
-            except Exception as e:
-                print(f"❌ Authentication failed: {e}")
+                await auth.authenticate(timeout=300)
+                print("✅ Authentication successful!")
+            except Exception:
+                print("❌ Authentication failed")
                 return
 
         # Test authenticated request
@@ -798,8 +779,8 @@ if __name__ == "__main__":
                         print(f"   Response length: {len(data)} characters")
                     else:
                         print(f"❌ API request failed: {response.status}")
-        except Exception as e:
-            print(f"❌ Authenticated request failed: {e}")
+        except Exception:
+            print("❌ Authenticated request failed")
 
     # Run example
     asyncio.run(main())

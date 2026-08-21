@@ -10,6 +10,8 @@ from src.api.yahoo_credentials import (
     YahooProvisioningError,
     YAHOO_PROVISIONING_MESSAGE,
     get_yahoo_consumer_credentials,
+    is_yahoo_provisioning_failure,
+    is_yahoo_token_rejected,
     load_project_environment,
     persist_yahoo_tokens,
 )
@@ -20,10 +22,7 @@ load_project_environment()
 # Module-level token cache
 _YAHOO_ACCESS_TOKEN = os.getenv("YAHOO_ACCESS_TOKEN")
 YAHOO_API_BASE = "https://fantasysports.yahooapis.com/fantasy/v2"
-_PROVISIONING_MARKERS = (
-    "additional_authorization_required",
-    "This application is not authorized to perform this action.",
-)
+
 
 
 def get_access_token() -> str:
@@ -83,7 +82,7 @@ async def yahoo_api_call(
                 text = await response.text()
                 if _is_provisioning_failure(response.status, text):
                     raise YahooProvisioningError(YAHOO_PROVISIONING_MESSAGE)
-                if retry_on_auth_fail:
+                if retry_on_auth_fail and _is_token_rejected(response.status, text):
                     refresh_result = await refresh_yahoo_token()
                     if refresh_result.get("status") == "success":
                         return await yahoo_api_call(
@@ -93,6 +92,8 @@ async def yahoo_api_call(
                         "Yahoo API auth failed; refresh token was rejected. "
                         "Reauthorize Yahoo with utils/setup_yahoo_auth.py."
                     )
+                if retry_on_auth_fail:
+                    raise Exception(f"Yahoo API error {response.status}: {_safe_response_excerpt(text)}")
                 raise Exception("Yahoo API error 401 after token refresh")
             elif response.status == 403:
                 text = await response.text()
@@ -167,7 +168,11 @@ async def refresh_yahoo_token() -> Dict:
 
 
 def _is_provisioning_failure(status: int, text: str) -> bool:
-    return status in (401, 403) and any(marker in text for marker in _PROVISIONING_MARKERS)
+    return is_yahoo_provisioning_failure(status, text)
+
+
+def _is_token_rejected(status: int, text: str) -> bool:
+    return is_yahoo_token_rejected(status, text)
 
 
 def _safe_response_excerpt(text: str) -> str:

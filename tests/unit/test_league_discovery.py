@@ -311,8 +311,8 @@ def test_setup_uses_current_nfl_metadata_opaque_game_key(monkeypatch, tmp_path):
     fake_yfpy = ModuleType("yfpy")
     fake_yfpy.YahooFantasySportsQuery = FakeYahooFantasySportsQuery
 
-    monkeypatch.setenv("YAHOO_CLIENT_ID", "client-id")
-    monkeypatch.setenv("YAHOO_CLIENT_SECRET", "client-secret")
+    monkeypatch.setenv("YAHOO_CONSUMER_KEY", "client-id")
+    monkeypatch.setenv("YAHOO_CONSUMER_SECRET", "client-secret")
     monkeypatch.setitem(sys.modules, "dotenv", fake_dotenv)
     monkeypatch.setitem(sys.modules, "yfpy", fake_yfpy)
     monkeypatch.setattr("builtins.input", lambda *_args, **_kwargs: "")
@@ -322,6 +322,9 @@ def test_setup_uses_current_nfl_metadata_opaque_game_key(monkeypatch, tmp_path):
     module = importlib.util.module_from_spec(spec)
     assert spec is not None and spec.loader is not None
     spec.loader.exec_module(module)
+    monkeypatch.setattr(module, "preflight_fantasy_access", lambda access_token: True)
+    monkeypatch.setattr(module, "update_env_file_with_tokens", lambda *args, **kwargs: None)
+    assert module._run_yfpy_flow("client-id", "client-secret") is False
 
     assert FakeYahooFantasySportsQuery.init_kwargs["game_code"] == "nfl"
     assert "game_id" not in FakeYahooFantasySportsQuery.init_kwargs
