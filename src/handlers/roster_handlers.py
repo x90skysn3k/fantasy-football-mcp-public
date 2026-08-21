@@ -7,6 +7,7 @@ from typing import Any, Dict, List
 get_user_team_info = None
 yahoo_api_call = None
 parse_team_roster = None
+resolve_league_season = None
 
 
 async def handle_ff_get_roster(arguments: dict) -> dict:
@@ -67,7 +68,8 @@ async def handle_ff_get_roster(arguments: dict) -> dict:
             }
 
     data = await yahoo_api_call(f"team/{team_key}/roster")
-    roster = parse_team_roster(data)
+    season = await resolve_league_season(league_key)
+    roster = parse_team_roster(data, season=season)
 
     if not roster:
         logging.debug(

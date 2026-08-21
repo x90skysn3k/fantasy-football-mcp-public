@@ -71,80 +71,135 @@ if os.getenv("YAHOO_ACCESS_TOKEN"):
 # Create server instance
 server = Server("fantasy-football")
 
-# Cache for leagues
-LEAGUES_CACHE = {}
+# Cache for leagues, keyed by resolved fantasy season.
+LEAGUES_CACHE: dict[int, dict[str, dict[str, Any]]] = {}
+
+
+def _merge_yahoo_game(game_obj: Any) -> tuple[dict[str, Any], Any]:
+    """Flatten Yahoo's nested game array into metadata and optional leagues."""
+    metadata: dict[str, Any] = {}
+    leagues = None
+
+    def visit(value: Any) -> None:
+        nonlocal leagues
+        if isinstance(value, dict):
+            if "game" in value:
+                visit(value["game"])
+            if "leagues" in value:
+                leagues = value["leagues"]
+            for key in ("game_key", "code", "season", "name"):
+                if key in value:
+                    metadata[key] = value[key]
+        elif isinstance(value, list):
+            for item in value:
+                visit(item)
+
+    visit(game_obj)
+    return metadata, leagues
+
+
+def _iter_yahoo_games(data: dict[str, Any]) -> list[tuple[dict[str, Any], Any]]:
+    """Yield flattened game metadata from a Yahoo users/games response."""
+    games_found: list[tuple[dict[str, Any], Any]] = []
+    users = data.get("fantasy_content", {}).get("users", {})
+    if not isinstance(users, dict):
+        return games_found
+
+    for user_entry in users.values():
+        if not isinstance(user_entry, dict):
+            continue
+        user = user_entry.get("user")
+        if not isinstance(user, list):
+            continue
+        for item in user:
+            if not isinstance(item, dict) or not isinstance(item.get("games"), dict):
+                continue
+            for key, game_entry in item["games"].items():
+                if key == "count" or not isinstance(game_entry, dict):
+                    continue
+                game_obj = game_entry.get("game")
+                if game_obj is not None:
+                    games_found.append(_merge_yahoo_game(game_obj))
+
+    return games_found
+
+
+async def discover_nfl_game() -> dict[str, Any]:
+    """Discover the active Yahoo NFL game by symbolic game code."""
+    data = await yahoo_api_call("users;use_login=1/games;game_keys=nfl")
+
+    for metadata, _ in _iter_yahoo_games(data):
+        if metadata.get("code") != "nfl":
+            continue
+        if not metadata.get("game_key"):
+            raise RuntimeError("Yahoo NFL game metadata is missing game_key")
+        try:
+            season = resolve_fantasy_season(metadata)
+        except ValueError as exc:
+            raise RuntimeError(f"Yahoo NFL game metadata has malformed season: {exc}") from exc
+        return {
+            "game_key": str(metadata["game_key"]),
+            "season": season,
+            "code": "nfl",
+        }
+
+    raise RuntimeError("Yahoo response did not include an NFL game")
+
+
+def _iter_yahoo_league_dicts(data: dict[str, Any], nfl_game_key: str) -> list[dict[str, Any]]:
+    """Extract league dictionaries for the discovered NFL game."""
+    league_dicts: list[dict[str, Any]] = []
+    for metadata, league_data in _iter_yahoo_games(data):
+        if metadata.get("code") != "nfl" and str(metadata.get("game_key")) != nfl_game_key:
+            continue
+        if not isinstance(league_data, dict):
+            continue
+        for key, league_entry in league_data.items():
+            if key == "count" or not isinstance(league_entry, dict):
+                continue
+            league_info = league_entry.get("league")
+            if isinstance(league_info, list) and league_info:
+                first = league_info[0]
+                if isinstance(first, list) and first and isinstance(first[0], dict):
+                    league_dicts.append(first[0])
+                elif isinstance(first, dict):
+                    league_dicts.append(first)
+    return league_dicts
 
 
 async def discover_leagues() -> dict[str, dict[str, Any]]:
     """Discover all active NFL leagues for the authenticated user."""
-    global LEAGUES_CACHE
+    nfl_game = await discover_nfl_game()
+    game_key = nfl_game["game_key"]
+    season = nfl_game["season"]
 
-    if LEAGUES_CACHE:
-        return LEAGUES_CACHE
+    if season in LEAGUES_CACHE:
+        return LEAGUES_CACHE[season]
 
-    # Get current NFL leagues (game key 461 for 2025)
     data = await yahoo_api_call("users;use_login=1/games;game_keys=nfl/leagues")
+    leagues: dict[str, dict[str, Any]] = {}
+    for league_dict in _iter_yahoo_league_dicts(data, game_key):
+        league_key = league_dict.get("league_key", "")
+        if not league_key:
+            continue
+        league_season = league_dict.get("season")
+        resolved_league_season = (
+            resolve_fantasy_season({"season": league_season})
+            if league_season is not None
+            else season
+        )
+        leagues[league_key] = {
+            "key": league_key,
+            "id": league_dict.get("league_id", ""),
+            "name": league_dict.get("name", "Unknown"),
+            "season": resolved_league_season,
+            "num_teams": league_dict.get("num_teams", 0),
+            "scoring_type": league_dict.get("scoring_type", "head"),
+            "current_week": league_dict.get("current_week", 1),
+            "is_finished": league_dict.get("is_finished", 0),
+        }
 
-    leagues = {}
-    try:
-        users = data.get("fantasy_content", {}).get("users", {})
-
-        if "0" in users:
-            user = users["0"]["user"]
-
-            if isinstance(user, list):
-                for item in user:
-                    if isinstance(item, dict) and "games" in item:
-                        games = item["games"]
-
-                        if "0" in games:  # First game (NFL)
-                            game = games["0"]["game"]
-                            if isinstance(game, list):
-                                for g in game:
-                                    if isinstance(g, dict) and "leagues" in g:
-                                        league_data = g["leagues"]
-
-                                        for key in league_data:
-                                            if key != "count" and isinstance(
-                                                league_data[key], dict
-                                            ):
-                                                if "league" in league_data[key]:
-                                                    league_info = league_data[key]["league"]
-                                                    if (
-                                                        isinstance(league_info, list)
-                                                        and len(league_info) > 0
-                                                    ):
-                                                        league_dict = league_info[0]
-
-                                                        league_key = league_dict.get(
-                                                            "league_key", ""
-                                                        )
-                                                        leagues[league_key] = {
-                                                            "key": league_key,
-                                                            "id": league_dict.get("league_id", ""),
-                                                            "name": league_dict.get(
-                                                                "name", "Unknown"
-                                                            ),
-                                                            "season": league_dict.get(
-                                                                "season", 2025
-                                                            ),
-                                                            "num_teams": league_dict.get(
-                                                                "num_teams", 0
-                                                            ),
-                                                            "scoring_type": league_dict.get(
-                                                                "scoring_type", "head"
-                                                            ),
-                                                            "current_week": league_dict.get(
-                                                                "current_week", 1
-                                                            ),
-                                                            "is_finished": league_dict.get(
-                                                                "is_finished", 0
-                                                            ),
-                                                        }
-    except Exception:
-        pass  # Silently handle error to not interfere with MCP protocol
-
-    LEAGUES_CACHE = leagues
+    LEAGUES_CACHE[season] = leagues
     return leagues
 
 
@@ -243,106 +298,44 @@ async def get_user_team_key(league_key: Optional[str]) -> Optional[str]:
     team_info = await get_user_team_info(league_key)
     return team_info["team_key"] if team_info else None
 
+async def _resolve_league_season(league_key: Optional[str]) -> int:
+    """Resolve the active fantasy season for league-scoped Yahoo parsing."""
+    if league_key:
+        for leagues in LEAGUES_CACHE.values():
+            league_info = leagues.get(league_key)
+            if league_info and isinstance(league_info.get("season"), int):
+                return league_info["season"]
+
+    nfl_game = await discover_nfl_game()
+    return nfl_game["season"]
+
+
 
 async def get_waiver_wire_players(
     league_key: str, position: str = "all", sort: str = "rank", count: int = 30
 ) -> list[dict]:
     """Get available waiver wire players with detailed stats."""
     try:
-        # Build the API call with filters
+        season = await _resolve_league_season(league_key)
         pos_filter = f";position={position}" if position != "all" else ""
         sort_type = {
-            "rank": "OR",  # Overall rank
-            "points": "PTS",  # Points
-            "owned": "O",  # Ownership %
-            "trending": "A",  # Added %
+            "rank": "OR",
+            "points": "PTS",
+            "owned": "O",
+            "trending": "A",
         }.get(sort, "OR")
 
         endpoint = (
             f"league/{league_key}/players;status=A{pos_filter};sort={sort_type};count={count}"
         )
         data = await yahoo_api_call(endpoint)
+        players = parse_yahoo_free_agent_players(data, season=season)
 
-        players = []
-        league = data.get("fantasy_content", {}).get("league", [])
-
-        # Players are in the second element of the league array
-        if len(league) > 1 and isinstance(league[1], dict) and "players" in league[1]:
-            players_data = league[1]["players"]
-
-            for key in players_data:
-                if key != "count" and isinstance(players_data[key], dict):
-                    if "player" in players_data[key]:
-                        player_array = players_data[key]["player"]
-
-                        # Player data is in nested array structure
-                        if isinstance(player_array, list) and len(player_array) > 0:
-                            player_data = player_array[0]
-
-                            if isinstance(player_data, list):
-                                player_info = {}
-
-                                for element in player_data:
-                                    if isinstance(element, dict):
-                                        # Basic info
-                                        if "name" in element:
-                                            player_info["name"] = element["name"]["full"]
-                                        if "player_key" in element:
-                                            player_info["player_key"] = element["player_key"]
-                                        if "editorial_team_abbr" in element:
-                                            player_info["team"] = element["editorial_team_abbr"]
-                                        if "display_position" in element:
-                                            player_info["position"] = element["display_position"]
-                                        
-                                        # Extract bye week with fallback to static data
-                                        api_bye_week = None
-                                        if "bye_weeks" in element:
-                                            bye_weeks_data = element["bye_weeks"]
-                                            if isinstance(bye_weeks_data, dict) and "week" in bye_weeks_data:
-                                                bye_week = bye_weeks_data.get("week")
-                                                # Validate bye week is a valid week number (1-18)
-                                                if bye_week and str(bye_week).isdigit():
-                                                    bye_num = int(bye_week)
-                                                    if 1 <= bye_num <= 18:
-                                                        api_bye_week = bye_num
-                                        
-                                        # Use fallback utility to get bye week (tries API first, then static data)
-                                        team_abbr = element.get("editorial_team_abbr", "")
-                                        player_info["bye"] = get_bye_week_with_fallback(
-                                            team_abbr,
-                                            api_bye_week,
-                                            season=resolve_fantasy_season(),
-                                        )
-
-                                        # Ownership data
-                                        if "ownership" in element:
-                                            ownership = element["ownership"]
-                                            player_info["owned_pct"] = ownership.get(
-                                                "ownership_percentage", 0
-                                            )
-                                            player_info["weekly_change"] = ownership.get(
-                                                "weekly_change", 0
-                                            )
-
-                                        # Injury status
-                                        if "status" in element:
-                                            player_info["injury_status"] = element["status"]
-                                        if "status_full" in element:
-                                            player_info["injury_detail"] = element["status_full"]
-
-                                if player_info.get("name"):
-                                    # Ensure all expected fields are present with defaults
-                                    player_info.setdefault("team", "FA")  # Free Agent if no team
-                                    player_info.setdefault(
-                                        "owned_pct", 0
-                                    )  # 0% if no ownership data
-                                    player_info.setdefault(
-                                        "weekly_change", 0
-                                    )  # No change if no data
-                                    player_info.setdefault(
-                                        "injury_status", "Healthy"
-                                    )  # Assume healthy if not specified
-                                    players.append(player_info)
+        for player_info in players:
+            player_info.setdefault("team", "FA")
+            player_info.setdefault("owned_pct", 0)
+            player_info.setdefault("weekly_change", 0)
+            player_info.setdefault("injury_status", "Healthy")
 
         return players
     except Exception:
@@ -354,92 +347,22 @@ async def get_draft_rankings(
 ) -> list[dict]:
     """Get pre-draft rankings with ADP data."""
     try:
-        # If no league key provided, get the first available league
         if not league_key:
             leagues = await discover_leagues()
             if leagues:
                 league_key = list(leagues.keys())[0]
             else:
-                return []  # No leagues available
+                return []
 
+        season = await _resolve_league_season(league_key)
         pos_filter = f";position={position}" if position != "all" else ""
-
-        # Get all players sorted by rank for the specified league
         endpoint = f"league/{league_key}/players{pos_filter};sort=OR;count={count}"
         data = await yahoo_api_call(endpoint)
+        players = parse_yahoo_free_agent_players(data, season=season)
 
-        players = []
-        league = data.get("fantasy_content", {}).get("league", [])
+        for rank, player_info in enumerate(players, start=1):
+            player_info.setdefault("rank", rank)
 
-        # Players are in the second element of the league array
-        if len(league) > 1 and isinstance(league[1], dict) and "players" in league[1]:
-            players_data = league[1]["players"]
-
-            for key in players_data:
-                if key != "count" and isinstance(players_data[key], dict):
-                    if "player" in players_data[key]:
-                        player_array = players_data[key]["player"]
-
-                        # Player data is in nested array structure
-                        if isinstance(player_array, list) and len(player_array) > 0:
-                            player_data = player_array[0]
-
-                            if isinstance(player_data, list):
-                                player_info = {}
-                                rank = int(key) + 1  # Use the key as rank
-
-                                for element in player_data:
-                                    if isinstance(element, dict):
-                                        if "name" in element:
-                                            player_info["name"] = element["name"]["full"]
-                                        if "editorial_team_abbr" in element:
-                                            player_info["team"] = element["editorial_team_abbr"]
-                                        if "display_position" in element:
-                                            player_info["position"] = element["display_position"]
-                                        
-                                        # Extract bye week with fallback to static data
-                                        api_bye_week = None
-                                        if "bye_weeks" in element:
-                                            bye_weeks_data = element["bye_weeks"]
-                                            if isinstance(bye_weeks_data, dict) and "week" in bye_weeks_data:
-                                                bye_week = bye_weeks_data.get("week")
-                                                # Validate bye week is a valid week number (1-18)
-                                                if bye_week and str(bye_week).isdigit():
-                                                    bye_num = int(bye_week)
-                                                    if 1 <= bye_num <= 18:
-                                                        api_bye_week = bye_num
-                                        
-                                        # Use fallback utility to get bye week (tries API first, then static data)
-                                        team_abbr = element.get("editorial_team_abbr", "")
-                                        player_info["bye"] = get_bye_week_with_fallback(
-                                            team_abbr,
-                                            api_bye_week,
-                                            season=resolve_fantasy_season(),
-                                        )
-
-                                        # Draft data if available
-                                        if "draft_analysis" in element:
-                                            draft = element["draft_analysis"]
-                                            player_info["average_draft_position"] = draft.get(
-                                                "average_pick", rank
-                                            )
-                                            player_info["average_round"] = draft.get(
-                                                "average_round", "N/A"
-                                            )
-                                            player_info["average_cost"] = draft.get(
-                                                "average_cost", "N/A"
-                                            )
-                                            player_info["percent_drafted"] = draft.get(
-                                                "percent_drafted", 0
-                                            )
-                                        else:
-                                            # Use rank as ADP if no draft data
-                                            player_info["rank"] = rank
-
-                                if player_info.get("name"):
-                                    players.append(player_info)
-
-        # Sort by ADP if available
         players.sort(
             key=lambda x: (
                 float(x.get("average_draft_position", 999))
@@ -1159,6 +1082,7 @@ inject_roster_dependencies(
     get_user_team_info=get_user_team_info,
     yahoo_api_call=yahoo_api_call,
     parse_team_roster=parse_team_roster,
+    resolve_league_season=_resolve_league_season,
 )
 
 # Inject dependencies for matchup handlers
@@ -1167,12 +1091,15 @@ inject_matchup_dependencies(
     get_user_team_info=get_user_team_info,
     yahoo_api_call=yahoo_api_call,
     parse_team_roster=parse_team_roster,
+    resolve_league_season=_resolve_league_season,
 )
 
 # Inject dependencies for player handlers
 inject_player_dependencies(
     yahoo_api_call=yahoo_api_call,
     get_waiver_wire_players=get_waiver_wire_players,
+    parse_team_roster=parse_team_roster,
+    resolve_league_season=_resolve_league_season,
 )
 
 # Inject dependencies for draft handlers

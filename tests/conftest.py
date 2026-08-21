@@ -46,7 +46,7 @@ def mock_yahoo_league_response() -> Dict[str, Any]:
                                                                 "league_key": "461.l.61410",
                                                                 "league_id": "61410",
                                                                 "name": "Anyone But Andy",
-                                                                "season": "2025",
+                                                                "season": "2026",
                                                                 "num_teams": 10,
                                                                 "current_week": 1,
                                                                 "scoring_type": "head2head",

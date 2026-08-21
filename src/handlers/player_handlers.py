@@ -5,6 +5,8 @@ from typing import Any, Dict
 # These will be injected from main file
 yahoo_api_call = None
 get_waiver_wire_players = None
+parse_team_roster = None
+resolve_league_season = None
 
 
 async def handle_ff_get_players(arguments: dict) -> dict:
@@ -242,17 +244,16 @@ async def handle_ff_compare_teams(arguments: dict) -> dict:
     Returns:
         Dict with comparison data
     """
-    from src.parsers import parse_team_roster
-
     league_key = arguments.get("league_key")
     team_key_a = arguments.get("team_key_a")
     team_key_b = arguments.get("team_key_b")
+    season = await resolve_league_season(league_key)
 
     data_a = await yahoo_api_call(f"team/{team_key_a}/roster")
     data_b = await yahoo_api_call(f"team/{team_key_b}/roster")
 
-    roster_a = parse_team_roster(data_a)
-    roster_b = parse_team_roster(data_b)
+    roster_a = parse_team_roster(data_a, season=season)
+    roster_b = parse_team_roster(data_b, season=season)
 
     return {
         "league_key": league_key,

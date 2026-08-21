@@ -269,7 +269,9 @@ class LineupOptimizer:
     def __init__(self) -> None:
         pass
 
-    async def parse_yahoo_roster(self, roster_payload: Dict[str, Any]) -> List[Player]:
+    async def parse_yahoo_roster(
+        self, roster_payload: Dict[str, Any], *, season: Optional[int] = None
+    ) -> List[Player]:
         """Convert a roster payload into Player objects.
 
         Supports both the simplified JSON returned by ``ff_get_roster`` and the
@@ -282,11 +284,12 @@ class LineupOptimizer:
             if isinstance(roster_obj, list):
                 entries = roster_obj
             else:
-                # Fallback: try using the legacy parser for raw Yahoo data
+                if season is None:
+                    raise ValueError("season is required when parsing raw Yahoo roster payloads")
                 try:
                     from fantasy_football_multi_league import parse_team_roster  # type: ignore
 
-                    entries = parse_team_roster(roster_payload)
+                    entries = parse_team_roster(roster_payload, season=season)
                 except Exception:
                     entries = []
         players: List[Player] = []

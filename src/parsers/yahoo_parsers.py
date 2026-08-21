@@ -3,14 +3,14 @@
 from typing import Any, Dict, List, Optional
 
 from src.utils.bye_weeks import get_bye_week_with_fallback
-from src.utils.season import resolve_fantasy_season
 
 
-def parse_team_roster(data: Dict) -> List[Dict]:
+def parse_team_roster(data: Dict, *, season: int) -> List[Dict]:
     """Extract a simple roster list from Yahoo team data.
 
     Args:
         data: Raw Yahoo API response from team/{team_key}/roster endpoint
+        season: Resolved fantasy season for official static bye-week fallback
 
     Returns:
         List of player dictionaries with name, position, team, status
@@ -142,7 +142,7 @@ def parse_team_roster(data: Dict) -> List[Dict]:
                         resolved_bye = get_bye_week_with_fallback(
                             team_abbr,
                             api_bye_week,
-                            season=resolve_fantasy_season(),
+                            season=season,
                         )
                         info["bye"] = resolved_bye
                     else:
@@ -153,11 +153,12 @@ def parse_team_roster(data: Dict) -> List[Dict]:
     return roster
 
 
-def parse_yahoo_free_agent_players(data: Dict) -> List[Dict]:
+def parse_yahoo_free_agent_players(data: Dict, *, season: int) -> List[Dict]:
     """Extract free agent/waiver players from Yahoo data, similar to team roster.
 
     Args:
         data: Raw Yahoo API response from league/{league_key}/players endpoint
+        season: Resolved fantasy season for official static bye-week fallback
 
     Returns:
         List of player dictionaries with name, position, team, ownership stats
@@ -186,6 +187,9 @@ def parse_yahoo_free_agent_players(data: Dict) -> List[Dict]:
                 name_dict = container.get("name")
                 if isinstance(name_dict, dict) and "full" in name_dict:
                     info["name"] = name_dict.get("full")
+                # Keys and player metadata
+                if "player_key" in container:
+                    info["player_key"] = container["player_key"]
                 # Position
                 if "display_position" in container:
                     info["position"] = container.get("display_position")
@@ -223,9 +227,6 @@ def parse_yahoo_free_agent_players(data: Dict) -> List[Dict]:
                             info["bye"] = None
                     else:
                         info["bye"] = None
-                else:
-                    # No bye_weeks field present
-                    info["bye"] = None
 
             for element in player_array:
                 if isinstance(element, dict):
@@ -235,6 +236,16 @@ def parse_yahoo_free_agent_players(data: Dict) -> List[Dict]:
                         _scan_free_agent(sub)
 
             if info and info.get("name"):
+                team_abbr = info.get("team")
+                api_bye_week = info.get("bye") if isinstance(info.get("bye"), int) else None
+                if isinstance(team_abbr, str) and team_abbr:
+                    info["bye"] = get_bye_week_with_fallback(
+                        team_abbr,
+                        api_bye_week,
+                        season=season,
+                    )
+                else:
+                    info["bye"] = None
                 players.append(info)
 
     return players

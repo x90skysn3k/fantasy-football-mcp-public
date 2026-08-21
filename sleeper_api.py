@@ -16,6 +16,7 @@ import re
 
 # Import caching from our yahoo utils
 from src.api.yahoo_utils import ResponseCache
+from src.utils.season import resolve_fantasy_season
 
 
 class SleeperAPI:
@@ -391,7 +392,7 @@ class SleeperAPI:
         fallback_projections = {}
         all_players = await self.get_all_players()
 
-        # Position-based average fantasy points (rough estimates for 2025)
+        # Position-based average fantasy points used only when Sleeper projections are unavailable.
         position_averages = {
             "QB": {"elite": 25.0, "strong": 20.0, "solid": 16.0, "depth": 12.0, "deep": 8.0},
             "RB": {"elite": 18.0, "strong": 14.0, "solid": 11.0, "depth": 8.0, "deep": 5.0},
@@ -567,11 +568,9 @@ class SleeperAPI:
             }
         }
         """
-        # Note: season parameter currently unused as this returns mock/static data
-        # TODO: Replace with real-time defensive stats from Sleeper API or other source
-        # For now, return current season defensive rankings (manually updated)
-
-        # Mock data for 2025 season (manually updated - should be replaced with API data)
+        # Note: season parameter currently unused as this returns static data.
+        # Replace with real-time defensive stats from Sleeper API or another source before labeling
+        # these rankings as season-qualified.
         mock_rankings: Dict[str, Dict[str, int]] = {
             "ARI": {"vs_qb": 28, "vs_rb": 32, "vs_wr": 25, "vs_te": 27},
             "ATL": {"vs_qb": 22, "vs_rb": 26, "vs_wr": 18, "vs_te": 20},
@@ -960,19 +959,16 @@ async def get_current_week() -> int:
 
 
 async def get_current_season() -> int:
-    """Get current NFL season (fallback to current year)."""
+    """Get current NFL season using Sleeper state metadata when it is valid."""
     try:
         state = await sleeper_client.get_nfl_state()
         season = state.get("season")
-        if isinstance(season, int):
-            return season
-        # Sleeper may return season as string
-        if isinstance(season, str) and season.isdigit():
-            return int(season)
+        if season is not None:
+            return resolve_fantasy_season({"season": season})
     except Exception:
         pass
-    # Fallback: infer from calendar year
-    return datetime.now().year
+
+    return resolve_fantasy_season()
 
 
 async def get_player_projection(

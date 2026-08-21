@@ -5,6 +5,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 
+def test_canonical_server_module_imports():
+    import fantasy_football_multi_league as server_module
+
+    assert server_module.server is not None
+
+
 class TestLeagueToolsIntegration:
     """Integration tests for league-related MCP tools."""
 
@@ -46,7 +52,7 @@ class TestLeagueToolsIntegration:
             "461.l.61410": {
                 "key": "461.l.61410",
                 "name": "Anyone But Andy",
-                "season": "2025",
+                "season": 2026,
                 "num_teams": 10,
                 "current_week": 1,
                 "scoring_type": "head2head",
@@ -78,7 +84,7 @@ class TestLeagueToolsIntegration:
 
             assert result["league"] == "Anyone But Andy"
             assert result["key"] == "461.l.61410"
-            assert result["season"] == "2025"
+            assert result["season"] == 2026
             assert result["your_team"]["name"] == "BreesusChr1st"
 
 
@@ -93,7 +99,7 @@ class TestRosterToolsIntegration:
         from src.parsers.yahoo_parsers import parse_team_roster
 
         # Step 1: Parse Yahoo roster
-        parsed_roster = parse_team_roster(mock_yahoo_roster_response)
+        parsed_roster = parse_team_roster(mock_yahoo_roster_response, season=2026)
         assert len(parsed_roster) == 3
 
         # Step 2: Feed to optimizer
@@ -162,11 +168,11 @@ class TestDataTransformationPipeline:
         )
 
         # Step 1: Parse roster
-        roster = parse_team_roster(mock_yahoo_roster_response)
+        roster = parse_team_roster(mock_yahoo_roster_response, season=2026)
         assert len(roster) == 3
 
         # Step 2: Parse free agents
-        free_agents = parse_yahoo_free_agent_players(mock_yahoo_free_agents_response)
+        free_agents = parse_yahoo_free_agent_players(mock_yahoo_free_agents_response, season=2026)
         assert len(free_agents) == 2
 
         # Step 3: Convert to Player objects
@@ -199,7 +205,7 @@ class TestDataTransformationPipeline:
 
         for response in malformed_responses:
             # Should not raise, just return empty
-            parsed = parse_team_roster(response)
+            parsed = parse_team_roster(response, season=2026)
             assert parsed == []
 
             # Optimizer should handle empty roster

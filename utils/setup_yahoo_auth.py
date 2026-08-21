@@ -80,6 +80,29 @@ def preflight_fantasy_access(access_token):
     print(f"⚠️  Preflight returned status {response.status_code}: {response.text[:200]}")
     return False
 
+def _get_yfpy_game_attr(game, *names):
+    """Read a Yahoo game attribute from yfpy objects or dict fixtures."""
+    for name in names:
+        if isinstance(game, dict) and game.get(name) is not None:
+            return game[name]
+        value = getattr(game, name, None)
+        if value is not None:
+            return value
+    return None
+
+
+def discover_yfpy_nfl_game_key(game_metadata):
+    """Return Yahoo's opaque current NFL game key from yfpy game metadata."""
+    code = _get_yfpy_game_attr(game_metadata, "code", "game_code")
+    if code != "nfl":
+        raise RuntimeError("Yahoo current game metadata is not for NFL")
+
+    game_key = _get_yfpy_game_attr(game_metadata, "game_key")
+    if game_key is None:
+        raise RuntimeError("Yahoo NFL game metadata is missing game_key")
+    return str(game_key)
+
+
 
 def exchange_verification_code_for_tokens(verification_code, client_id, client_secret):
     """Exchange Yahoo OAuth verification code for access and refresh tokens."""
@@ -375,7 +398,6 @@ try:
         query = YahooFantasySportsQuery(
             league_id="",  # Empty to get all leagues
             game_code="nfl",
-            game_id=449,  # 2025 NFL season
             YAHOO_CLIENT_ID=CLIENT_ID,
             YAHOO_CLIENT_SECRET=CLIENT_SECRET,
             browser_callback=True,  # Opens browser automatically
@@ -391,11 +413,10 @@ try:
         print("Testing connection by fetching your leagues...")
         try:
             # Get user info to verify connection
-            user_games = query.get_user_games()
-            print(f"✅ Connected! Found {len(user_games) if user_games else 0} games")
-            
-            # Try to get leagues
-            user_leagues = query.get_user_leagues_by_game_key("449")  # NFL 2025 season
+            current_game = query.get_current_game_metadata()
+            nfl_game_key = discover_yfpy_nfl_game_key(current_game)
+            print(f"✅ Connected! Current NFL game key: {nfl_game_key}")
+            user_leagues = query.get_user_leagues_by_game_key(nfl_game_key)
             if user_leagues:
                 print(f"✅ Found {len(user_leagues)} leagues:")
                 for i, league in enumerate(user_leagues, 1):
