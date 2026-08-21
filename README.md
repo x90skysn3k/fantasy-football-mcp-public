@@ -17,7 +17,7 @@ Data provided by Yahoo Fantasy Sports. Use of Yahoo Fantasy Sports API data is s
 ## Installation
 
 ```bash
-git clone https://github.com/derekrbreese/fantasy-football-mcp-public.git
+git clone https://github.com/x90skysn3k/fantasy-football-mcp-public.git
 cd fantasy-football-mcp-public
 python3 -m venv .venv
 . .venv/bin/activate

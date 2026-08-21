@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
-    {name = "Your Name", email = "your.email@example.com"}
+    {name = "x90skysn3k"}
 ]
 keywords = [
     "fantasy-football",
@@ -64,10 +64,10 @@ dev = [
 fantasy-football-mcp = "fantasy_football_multi_league:cli_main"
 
 [project.urls]
-Homepage = "https://github.com/yourusername/fantasy-football-mcp"
-Documentation = "https://github.com/yourusername/fantasy-football-mcp/wiki"
-Repository = "https://github.com/yourusername/fantasy-football-mcp.git"
-Issues = "https://github.com/yourusername/fantasy-football-mcp/issues"
+Homepage = "https://github.com/x90skysn3k/fantasy-football-mcp-public"
+Documentation = "https://github.com/x90skysn3k/fantasy-football-mcp-public/wiki"
+Repository = "https://github.com/x90skysn3k/fantasy-football-mcp-public.git"
+Issues = "https://github.com/x90skysn3k/fantasy-football-mcp-public/issues"
 
 [tool.setuptools]
 py-modules = ["fantasy_football_multi_league"]
@@ -80,7 +80,7 @@ src = ["data/*.json", "*.json", "*.yaml", "*.yml"]
 
 [tool.black]
 line-length = 100
-target-version = ["py39", "py310", "py311", "py312"]
+target-version = ["py310", "py311", "py312"]
 include = '\.pyi?$'
 extend-exclude = '''
 /(
@@ -95,7 +95,7 @@ extend-exclude = '''
 
 [tool.ruff]
 line-length = 100
-target-version = "py39"
+target-version = "py310"
 
 [tool.ruff.lint]
 select = [

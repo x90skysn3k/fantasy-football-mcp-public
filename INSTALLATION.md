@@ -16,7 +16,7 @@ Data provided by Yahoo Fantasy Sports. Use requires a Yahoo account, a Yahoo Dev
 ## 1. Clone and install
 
 ```bash
-git clone https://github.com/derekrbreese/fantasy-football-mcp-public.git
+git clone https://github.com/x90skysn3k/fantasy-football-mcp-public.git
 cd fantasy-football-mcp-public
 python3 -m venv .venv
 . .venv/bin/activate
@@ -24,7 +24,7 @@ python -m pip install --upgrade pip
 python -m pip install -e .
 ```
 
-The editable install reads `pyproject.toml`, installs `mcp>=1.2.0,<2`, and exposes the current console entrypoint:
+The editable install reads `pyproject.toml`, installs `mcp>=1.13.1,<1.14`, and exposes the current console entrypoint:
 
 ```bash
 fantasy-football-mcp
