@@ -13,7 +13,7 @@
 
 ## TDD / Verification
 - RED: `.venv/bin/python -m pytest tests/unit/test_yahoo_credentials.py tests/unit/test_api_client.py -q` failed at collection because `src.api.yahoo_credentials` and `YahooProvisioningError` did not exist.
-- GREEN: `.venv/bin/python -m pytest tests/unit/test_yahoo_credentials.py tests/unit/test_api_client.py -q` -> `24 passed`.
+- GREEN: `.venv/bin/python -m pytest tests/unit/test_yahoo_credentials.py tests/unit/test_api_client.py -q` -> `25 passed`.
 - Utility syntax check: `.venv/bin/python -m py_compile src/api/yahoo_credentials.py src/api/yahoo_client.py src/api/__init__.py config/settings.py fantasy_football_multi_league.py utils/setup_yahoo_auth.py utils/reauth_yahoo.py utils/refresh_yahoo_token.py utils/verify_setup.py src/agents/yahoo_auth.py tests/unit/test_yahoo_credentials.py tests/unit/test_api_client.py tests/unit/test_league_discovery.py tests/unit/test_yahoo_review_fixes.py` -> exit 0.
 
 ## Self-review notes
@@ -35,13 +35,9 @@
 - Resolved `TASK4-DEAD-COMPATIBILITY-SHIMS`: removed the dead `update_env_file` and `update_claude_config` refresh utility APIs rather than retaining no-op compatibility surfaces.
 
 ### Review-fix TDD / Verification
-- RED: `.venv/bin/python -m pytest tests/unit/test_yahoo_credentials.py tests/unit/test_api_client.py tests/unit/test_yahoo_review_fixes.py -q` failed with 11 review-regression failures after the new tests were added, covering the reviewed custody/config/utility/YahooAuth gaps.
-- Dependency setup for the new boring cross-platform lock: added `filelock` to `requirements.txt` and `pyproject.toml`; installed `filelock==3.16.1` into `.venv` for focused verification.
-- GREEN: `.venv/bin/python -m pytest tests/unit/test_yahoo_credentials.py tests/unit/test_api_client.py tests/unit/test_yahoo_review_fixes.py -q` -> `35 passed`.
-- Utility-focused GREEN: `.venv/bin/python -m pytest tests/unit/test_league_discovery.py -q` -> `9 passed`.
-- Combined focused GREEN: `.venv/bin/python -m pytest tests/unit/test_yahoo_credentials.py tests/unit/test_api_client.py tests/unit/test_yahoo_review_fixes.py tests/unit/test_league_discovery.py -q` -> `44 passed`.
-- Compile check: `.venv/bin/python -m py_compile src/api/yahoo_credentials.py src/api/yahoo_client.py src/api/__init__.py config/settings.py src/agents/yahoo_auth.py utils/setup_yahoo_auth.py utils/reauth_yahoo.py utils/refresh_yahoo_token.py utils/verify_setup.py tests/unit/test_yahoo_credentials.py tests/unit/test_api_client.py tests/unit/test_yahoo_review_fixes.py tests/unit/test_league_discovery.py` -> exit 0.
-- Config syntax check: `.venv/bin/python -c "import tomllib; tomllib.load(open('pyproject.toml','rb')); print('pyproject ok')"` -> `pyproject ok`.
+- RED: `.venv/bin/python -m pytest tests/unit/test_yahoo_credentials.py tests/unit/test_api_client.py -q` failed after the arbitrary-401 parameterization exposed an undefined test `refresh` mock; the stricter `"token_rejected"` body case also defined the intended no-refresh regression.
+- GREEN: `.venv/bin/python -m pytest tests/unit/test_yahoo_credentials.py tests/unit/test_api_client.py -q` -> `25 passed`.
+- Compile check: `.venv/bin/python -m py_compile src/api/yahoo_credentials.py src/api/yahoo_client.py src/api/__init__.py config/settings.py fantasy_football_multi_league.py utils/setup_yahoo_auth.py utils/reauth_yahoo.py utils/refresh_yahoo_token.py utils/verify_setup.py src/agents/yahoo_auth.py tests/unit/test_yahoo_credentials.py tests/unit/test_api_client.py tests/unit/test_league_discovery.py tests/unit/test_yahoo_review_fixes.py` -> exit 0.
 
 ### Review-fix self-review
 - Grep review confirmed active config/deployment/verify surfaces use canonical Yahoo environment names; remaining `YAHOO_CLIENT_ID` / `YAHOO_CLIENT_SECRET` references are third-party `yfpy` constructor keyword names or negative legacy-name tests.

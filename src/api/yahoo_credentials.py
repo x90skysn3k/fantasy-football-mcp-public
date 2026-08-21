@@ -99,8 +99,10 @@ def is_yahoo_provisioning_failure(status: int, text: str) -> bool:
 
 
 def is_yahoo_token_rejected(status: int, text: str) -> bool:
-    """Return True only for Yahoo rejected access-token responses."""
-    return status == 401 and "token_rejected" in text
+    """Return True only for Yahoo rejected access-token oauth_problem responses."""
+    return status == 401 and (
+        'oauth_problem="token_rejected"' in text or "oauth_problem=token_rejected" in text
+    )
 
 
 def _mutate_yahoo_env(env_path: Path, replacements: dict[str, str]) -> None:

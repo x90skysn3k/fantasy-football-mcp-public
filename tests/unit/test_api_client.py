@@ -240,12 +240,16 @@ class TestYahooApiCall:
         assert len(session.get_calls) == 2
         refresh.assert_awaited_once()
 
+    @pytest.mark.parametrize(
+        "body",
+        ['oauth_problem="invalid_scope"', '{"message":"token_rejected appears outside oauth_problem"}'],
+    )
     @pytest.mark.asyncio
     async def test_unknown_401_does_not_refresh(
-        self, mock_env_vars, mock_rate_limiter, mock_response_cache
+        self, body, mock_env_vars, mock_rate_limiter, mock_response_cache
     ):
         """Only oauth_problem=token_rejected triggers refresh; arbitrary 401s do not."""
-        session = MockSession(get_responses=[MockResponse(401, text='oauth_problem="invalid_scope"')])
+        session = MockSession(get_responses=[MockResponse(401, text=body)])
         refresh = AsyncMock(return_value={"status": "success"})
 
         with (
