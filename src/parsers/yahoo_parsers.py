@@ -3,6 +3,7 @@
 from typing import Any, Dict, List, Optional
 
 from src.utils.bye_weeks import get_bye_week_with_fallback
+from src.utils.season import resolve_fantasy_season
 
 
 def parse_team_roster(data: Dict) -> List[Dict]:
@@ -138,7 +139,11 @@ def parse_team_roster(data: Dict) -> List[Dict]:
                     team_abbr = info.get("team")
                     api_bye_week = info.get("bye") if isinstance(info.get("bye"), int) else None
                     if isinstance(team_abbr, str) and team_abbr:
-                        resolved_bye = get_bye_week_with_fallback(team_abbr, api_bye_week)
+                        resolved_bye = get_bye_week_with_fallback(
+                            team_abbr,
+                            api_bye_week,
+                            season=resolve_fantasy_season(),
+                        )
                         info["bye"] = resolved_bye
                     else:
                         info["bye"] = None

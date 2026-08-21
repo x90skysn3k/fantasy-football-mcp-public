@@ -136,6 +136,77 @@ class TestParseTeamRoster:
         assert len(result) == 1
         assert result[0]["team"] == "DEN"
 
+    def test_parse_roster_prefers_valid_api_bye_week(self):
+        """Test parsing keeps a valid Yahoo API bye over the 2026 fallback."""
+        response = {
+            "fantasy_content": {
+                "team": [
+                    [{"team_key": "461.l.61410.t.1"}],
+                    {
+                        "roster": {
+                            "0": {
+                                "players": {
+                                    "0": {
+                                        "player": [
+                                            [
+                                                {
+                                                    "name": {"full": "Api Bye Player"},
+                                                    "display_position": "TE",
+                                                    "editorial_team_abbr": "KC",
+                                                    "bye_weeks": {"week": "12"},
+                                                }
+                                            ]
+                                        ]
+                                    },
+                                    "count": 1,
+                                }
+                            }
+                        }
+                    },
+                ]
+            }
+        }
+
+        result = parse_team_roster(response)
+
+        assert len(result) == 1
+        assert result[0]["bye"] == 12
+
+    def test_parse_roster_uses_official_2026_fallback_for_missing_api_bye(self):
+        """Test parsing falls back to official 2026 bye data when Yahoo omits bye."""
+        response = {
+            "fantasy_content": {
+                "team": [
+                    [{"team_key": "461.l.61410.t.1"}],
+                    {
+                        "roster": {
+                            "0": {
+                                "players": {
+                                    "0": {
+                                        "player": [
+                                            [
+                                                {
+                                                    "name": {"full": "Fallback Bye Player"},
+                                                    "display_position": "WR",
+                                                    "editorial_team_abbr": "KC",
+                                                }
+                                            ]
+                                        ]
+                                    },
+                                    "count": 1,
+                                }
+                            }
+                        }
+                    },
+                ]
+            }
+        }
+
+        result = parse_team_roster(response)
+
+        assert len(result) == 1
+        assert result[0]["bye"] == 5
+
 
 class TestParseFreeAgentPlayers:
     """Test free agent/waiver wire player parsing."""

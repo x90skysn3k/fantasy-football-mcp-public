@@ -23,6 +23,7 @@ from src.api.yahoo_utils import rate_limiter, response_cache
 
 # Import bye week utilities
 from src.utils.bye_weeks import get_bye_week_with_fallback
+from src.utils.season import resolve_fantasy_season
 
 # Import all handlers from the handlers module
 from pathlib import Path
@@ -307,7 +308,11 @@ async def get_waiver_wire_players(
                                         
                                         # Use fallback utility to get bye week (tries API first, then static data)
                                         team_abbr = element.get("editorial_team_abbr", "")
-                                        player_info["bye"] = get_bye_week_with_fallback(team_abbr, api_bye_week)
+                                        player_info["bye"] = get_bye_week_with_fallback(
+                                            team_abbr,
+                                            api_bye_week,
+                                            season=resolve_fantasy_season(),
+                                        )
 
                                         # Ownership data
                                         if "ownership" in element:
@@ -406,7 +411,11 @@ async def get_draft_rankings(
                                         
                                         # Use fallback utility to get bye week (tries API first, then static data)
                                         team_abbr = element.get("editorial_team_abbr", "")
-                                        player_info["bye"] = get_bye_week_with_fallback(team_abbr, api_bye_week)
+                                        player_info["bye"] = get_bye_week_with_fallback(
+                                            team_abbr,
+                                            api_bye_week,
+                                            season=resolve_fantasy_season(),
+                                        )
 
                                         # Draft data if available
                                         if "draft_analysis" in element:
