@@ -92,16 +92,16 @@
 - **✓ ff_analyze_draft_state** - 0.00s
   - Tool: `ff_analyze_draft_state`
 
-### Analytics Handlers (1/1 passed)
+### Analytics Handlers (1/1 passed; optional)
 
 - **✓ ff_analyze_reddit_sentiment** - 5.54s
-  - Tool: `ff_analyze_reddit_sentiment`
+  - Tool: `ff_analyze_reddit_sentiment` (registered only when `ENABLE_REDDIT_SENTIMENT=1` before MCP server startup)
 
 ## Performance Metrics
 
 - **Average Response Time:** 0.67s
 - **Fastest Test:** 0.00s (ff_get_leagues)
-- **Slowest Test:** 5.54s (ff_analyze_reddit_sentiment)
+- **Slowest Test:** 5.54s (optional `ff_analyze_reddit_sentiment`; requires `ENABLE_REDDIT_SENTIMENT=1` at startup)
 
 ## Recommendations
 

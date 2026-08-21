@@ -206,6 +206,20 @@ def parse_yahoo_free_agent_players(data: Dict, *, season: int) -> List[Dict]:
                     info["weekly_change"] = container["ownership"].get("weekly_change", 0)
                 if "percent_owned" in container:
                     info["owned_pct"] = container["percent_owned"]
+                # Draft analysis / ADP metadata
+                draft_analysis = container.get("draft_analysis")
+                if isinstance(draft_analysis, dict):
+                    for field in (
+                        "average_pick",
+                        "average_round",
+                        "average_cost",
+                        "percent_drafted",
+                        "average_draft_position",
+                    ):
+                        if field in draft_analysis:
+                            info[field] = draft_analysis[field]
+                    if "average_pick" in draft_analysis:
+                        info["average_draft_position"] = draft_analysis["average_pick"]
                 # Injury
                 if "status" in container:
                     info["injury_status"] = container["status"]

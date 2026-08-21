@@ -6,7 +6,7 @@
 
 **Architecture:** Start an isolated `season-2026` worktree from `upstream/main`, then cherry-pick the approved design and this plan. Add a pure season resolver and season-keyed bye data, consolidate Yahoo authorization behavior in `src/api`, and keep the canonical `fantasy_football_multi_league.py` tool schemas stable while disabling Reddit by default.
 
-**Tech Stack:** Python 3.13 locally with Python >=3.9 compatibility, MCP Python SDK, aiohttp, python-dotenv, pytest/pytest-asyncio, Ruff, Black, Mypy, Yahoo Fantasy Sports OAuth 2.0, Sleeper API.
+**Tech Stack:** Python 3.13 locally with Python >=3.10 compatibility, MCP Python SDK, aiohttp, python-dotenv, pytest/pytest-asyncio, Ruff, Black, Mypy, Yahoo Fantasy Sports OAuth 2.0, Sleeper API.
 
 ## Global Constraints
 
@@ -302,7 +302,7 @@ Expected: missing credential module and incomplete 403 classification failures.
 
 - [ ] **Step 4: Implement one credential seam**
 
-Load `.env` from `Path(__file__).resolve().parents[2] / ".env"` before API configuration. Replace `YAHOO_CLIENT_ID`/`YAHOO_CLIENT_SECRET` reads and documentation with `YAHOO_CONSUMER_KEY`/`YAHOO_CONSUMER_SECRET`. Atomically persist successful access/refresh tokens and `YAHOO_TOKEN_TIME`; never embed tokens in MCP client configs.
+Load `.env` from `Path(__file__).resolve().parents[2] / ".env"` before API configuration. Replace legacy Yahoo client credential reads and documentation with `YAHOO_CONSUMER_KEY`/`YAHOO_CONSUMER_SECRET`. Atomically persist successful access/refresh tokens and `YAHOO_TOKEN_TIME`; never embed tokens in MCP client configs.
 
 - [ ] **Step 5: Complete provisioning classification**
 
@@ -376,7 +376,7 @@ Expected: contract tests pass with default 17 tools.
 - Modify: `README.md`
 - Modify: `INSTALLATION.md`
 - Create locally only: `.build/season-2026-live-smoke.json`
-- Modify locally only: `/Users/syoung/Library/Application Support/Claude/claude_desktop_config.json`
+- Modify locally only: `$HOME/Library/Application Support/Claude/claude_desktop_config.json`
 - Modify locally only: the active Pi/OMP MCP registration source identified during execution.
 
 **Interfaces:**

@@ -55,6 +55,7 @@ Add the following lines to your `.env` file in the project root:
 REDDIT_CLIENT_ID=your_client_id_here
 REDDIT_CLIENT_SECRET=your_client_secret_here
 REDDIT_USERNAME=your_reddit_username
+ENABLE_REDDIT_SENTIMENT=1
 ```
 
 **Example:**
@@ -62,6 +63,7 @@ REDDIT_USERNAME=your_reddit_username
 REDDIT_CLIENT_ID=abc123def456ghi789
 REDDIT_CLIENT_SECRET=xyz789abc123def456ghi789jkl012mno345
 REDDIT_USERNAME=myusername
+ENABLE_REDDIT_SENTIMENT=1
 ```
 
 ## Step 4: Verify Installation
@@ -78,11 +80,13 @@ Or if using the requirements file:
 pip install -r requirements.txt
 ```
 
-## Step 5: Test the Configuration
+## Step 5: Restart the MCP Server and Test the Configuration
 
-The Reddit API will be automatically initialized when you use features that require it, such as:
+Restart the MCP server after adding `ENABLE_REDDIT_SENTIMENT=1`; the optional
+Reddit tool is registered only when that flag is enabled at startup.
 
-- `ff_analyze_reddit_sentiment` - Analyze Reddit sentiment for players
+After the restart, confirm `ff_analyze_reddit_sentiment` appears in `tools/list`,
+then use it to analyze Reddit sentiment for players.
 
 If credentials are missing or incorrect, the app will:
 - Log a warning message
@@ -107,10 +111,13 @@ If credentials are missing or incorrect, the app will:
 
 ### Troubleshooting
 
+**"`ff_analyze_reddit_sentiment` is missing from `tools/list`"**
+- Check that `ENABLE_REDDIT_SENTIMENT=1` is in your `.env` file
+- Restart the MCP server after adding or changing the flag
+
 **"Reddit API credentials not configured"**
-- Check that all three variables are in your `.env` file
+- Check that all three Reddit credential variables are in your `.env` file
 - Verify there are no extra spaces or quotes around the values
-- Restart the MCP server after adding credentials
 
 **"Reddit API connection test failed"**
 - Verify your Client ID and Secret are correct

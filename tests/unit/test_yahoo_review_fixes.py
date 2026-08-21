@@ -597,3 +597,80 @@ def test_refresh_cli_classifies_provisioning_failure_with_shared_message(monkeyp
     output = capsys.readouterr().out
     assert refresh_yahoo_token.YAHOO_PROVISIONING_MESSAGE in output
     assert sentinel_access not in output
+
+
+@pytest.mark.asyncio
+async def test_draft_rankings_preserve_yahoo_draft_analysis_and_sort_by_adp(monkeypatch):
+    import fantasy_football_multi_league as legacy
+
+    yahoo_response = {
+        "fantasy_content": {
+            "league": [
+                [{"league_key": "461.l.61410"}],
+                {
+                    "players": {
+                        "0": {
+                            "player": [
+                                [
+                                    {
+                                        "player_key": "461.p.111",
+                                        "name": {"full": "Later ADP"},
+                                        "display_position": "RB",
+                                        "editorial_team_abbr": "NYJ",
+                                    }
+                                ],
+                                {
+                                    "draft_analysis": {
+                                        "average_pick": "25.2",
+                                        "average_round": "3.1",
+                                        "average_cost": "17.5",
+                                        "percent_drafted": "91",
+                                    }
+                                },
+                            ]
+                        },
+                        "1": {
+                            "player": [
+                                [
+                                    {
+                                        "player_key": "461.p.222",
+                                        "name": {"full": "Earlier ADP"},
+                                        "display_position": "WR",
+                                        "editorial_team_abbr": "KC",
+                                    }
+                                ],
+                                {
+                                    "draft_analysis": {
+                                        "average_pick": "12.4",
+                                        "average_round": "2.2",
+                                        "average_cost": "29.0",
+                                        "percent_drafted": "98",
+                                    }
+                                },
+                            ]
+                        },
+                        "count": 2,
+                    }
+                },
+            ]
+        }
+    }
+
+    async def fake_yahoo_api_call(endpoint):
+        assert endpoint == "league/461.l.61410/players;sort=OR;count=2"
+        return yahoo_response
+
+    async def fake_resolve_league_season(_league_key):
+        return 2026
+
+    monkeypatch.setattr(legacy, "yahoo_api_call", fake_yahoo_api_call)
+    monkeypatch.setattr(legacy, "_resolve_league_season", fake_resolve_league_season)
+
+    players = await legacy.get_draft_rankings("461.l.61410", count=2)
+
+    assert [player["name"] for player in players] == ["Earlier ADP", "Later ADP"]
+    assert players[0]["average_pick"] == "12.4"
+    assert players[0]["average_round"] == "2.2"
+    assert players[0]["average_cost"] == "29.0"
+    assert players[0]["percent_drafted"] == "98"
+    assert players[0]["average_draft_position"] == "12.4"
