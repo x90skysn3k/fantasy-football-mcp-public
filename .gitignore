@@ -1,8 +1,6 @@
 # Environment variables
-.env
-.env.*
-.env.local
-.env.*.local
+.env*
+!.env.example
 
 # Python
 __pycache__/
@@ -18,11 +16,6 @@ build/
 dist/
 *.egg-info/
 .pytest_cache/
-
-# Tests (excluded from public repository)
-tests/
-test_*.py
-*_test.py
 
 # IDE
 .vscode/
@@ -46,8 +39,11 @@ coverage.xml
 
 # Auth and tokens
 .auth/
-token.json
+.tokens/
+.yahoo_token.json
 yahoo_token.json
+*.token.json
+token.json
 *.token
 
 # Development and debug files
@@ -118,6 +114,7 @@ Thumbs.db
 ehthumbs.db
 
 # Personal/development directories
+.worktrees/
 .claude/
 .qoder/
 .devcontainer/

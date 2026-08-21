@@ -73,7 +73,7 @@ Issues = "https://github.com/yourusername/fantasy-football-mcp/issues"
 packages = ["src"]
 
 [tool.setuptools.package-data]
-src = ["*.json", "*.yaml", "*.yml"]
+src = ["data/*.json", "*.json", "*.yaml", "*.yml"]
 
 [tool.black]
 line-length = 100
