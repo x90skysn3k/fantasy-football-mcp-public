@@ -146,6 +146,29 @@ def _normalize_position(raw: Any) -> str:
     return str(raw).upper()
 
 
+def _has_yahoo_roster_players(payload: Dict[str, Any]) -> bool:
+    """Return True when payload contains Yahoo's raw roster players container."""
+    fantasy_content = payload.get("fantasy_content")
+    if not isinstance(fantasy_content, dict):
+        return False
+    team = fantasy_content.get("team")
+    if not isinstance(team, list):
+        return False
+
+    for item in team:
+        if not isinstance(item, dict):
+            continue
+        roster_data = item.get("roster")
+        if not isinstance(roster_data, dict):
+            continue
+        for container in (roster_data.get("0"), roster_data, roster_data.get("roster")):
+            if isinstance(container, dict) and isinstance(container.get("players"), dict):
+                return True
+    return False
+
+
+
+
 def _calculate_match_confidence(match_method: str) -> float:
     """Calculate confidence score for Sleeper match quality."""
     if not match_method:
@@ -283,7 +306,7 @@ class LineupOptimizer:
             roster_obj = roster_payload.get("roster")
             if isinstance(roster_obj, list):
                 entries = roster_obj
-            else:
+            elif _has_yahoo_roster_players(roster_payload):
                 if season is None:
                     raise ValueError("season is required when parsing raw Yahoo roster payloads")
                 try:
