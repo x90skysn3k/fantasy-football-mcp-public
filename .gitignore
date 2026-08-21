@@ -13,6 +13,7 @@ venv/
 .venv/
 ENV/
 build/
+.build/
 dist/
 *.egg-info/
 .pytest_cache/
