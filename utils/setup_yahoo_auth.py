@@ -201,10 +201,10 @@ def _run_yfpy_flow(client_id, client_secret):
         query = YahooFantasySportsQuery(
             league_id="",
             game_code="nfl",
-            YAHOO_CLIENT_ID=client_id,
-            YAHOO_CLIENT_SECRET=client_secret,
+            yahoo_consumer_key=client_id,
+            yahoo_consumer_secret=client_secret,
             browser_callback=True,
-            env_file_location=ENV_FILE_PATH,
+            env_file_location=PROJECT_ROOT,
             save_token_data_to_env_file=False,
         )
 

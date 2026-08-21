@@ -293,9 +293,39 @@ def test_setup_uses_current_nfl_metadata_opaque_game_key(monkeypatch, tmp_path):
         init_kwargs = None
         requested_game_key = None
 
-        def __init__(self, **kwargs):
-            type(self).init_kwargs = kwargs
-
+        def __init__(
+            self,
+            league_id,
+            game_code,
+            game_id=None,
+            yahoo_consumer_key=None,
+            yahoo_consumer_secret=None,
+            yahoo_access_token_json=None,
+            env_var_fallback=True,
+            env_file_location=None,
+            save_token_data_to_env_file=False,
+            all_output_as_json_str=False,
+            browser_callback=True,
+            retries=3,
+            backoff=0,
+            offline=False,
+        ):
+            type(self).init_kwargs = {
+                "league_id": league_id,
+                "game_code": game_code,
+                "game_id": game_id,
+                "yahoo_consumer_key": yahoo_consumer_key,
+                "yahoo_consumer_secret": yahoo_consumer_secret,
+                "yahoo_access_token_json": yahoo_access_token_json,
+                "env_var_fallback": env_var_fallback,
+                "env_file_location": env_file_location,
+                "save_token_data_to_env_file": save_token_data_to_env_file,
+                "all_output_as_json_str": all_output_as_json_str,
+                "browser_callback": browser_callback,
+                "retries": retries,
+                "backoff": backoff,
+                "offline": offline,
+            }
         def get_current_game_metadata(self):
             return SimpleNamespace(code="nfl", game_key="933")
 
@@ -327,7 +357,11 @@ def test_setup_uses_current_nfl_metadata_opaque_game_key(monkeypatch, tmp_path):
     assert module._run_yfpy_flow("client-id", "client-secret") is False
 
     assert FakeYahooFantasySportsQuery.init_kwargs["game_code"] == "nfl"
-    assert "game_id" not in FakeYahooFantasySportsQuery.init_kwargs
+    assert FakeYahooFantasySportsQuery.init_kwargs["yahoo_consumer_key"] == "client-id"
+    assert FakeYahooFantasySportsQuery.init_kwargs["yahoo_consumer_secret"] == "client-secret"
+    assert FakeYahooFantasySportsQuery.init_kwargs["env_file_location"] == module.PROJECT_ROOT
+    assert FakeYahooFantasySportsQuery.init_kwargs["save_token_data_to_env_file"] is False
+    assert FakeYahooFantasySportsQuery.init_kwargs["game_id"] is None
     assert FakeYahooFantasySportsQuery.requested_game_key == "933"
 
     with pytest.raises(RuntimeError, match="missing game_key"):

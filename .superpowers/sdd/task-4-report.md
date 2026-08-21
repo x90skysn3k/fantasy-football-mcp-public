@@ -23,7 +23,7 @@
 - Review-fix test coverage now includes unknown 401 no-refresh behavior while preserving `token_rejected` refresh/retry.
 
 ## Concerns
-- `yfpy` constructor keyword names remain `YAHOO_CLIENT_ID` / `YAHOO_CLIENT_SECRET` because those are third-party API parameter names, not environment-variable conventions.
+- Corrected in second review fix: pinned `yfpy==17.0.0` requires lowercase `yahoo_consumer_key` / `yahoo_consumer_secret` constructor keywords and a `Path` directory for `env_file_location`.
 
 ## Review Fix
 - Resolved `TASK4-CREDENTIAL-SEAM-BYPASS`: `src/agents/yahoo_auth.py` now loads and persists tokens only through the checkout `.env` seam, no longer accepts/uses an alternate token-store path, no longer creates `yahoo_tokens.json`, does not print token prefixes, performs one refresh attempt, and redacts upstream auth errors from logs/exceptions.
@@ -40,5 +40,21 @@
 - Compile check: `.venv/bin/python -m py_compile src/api/yahoo_credentials.py src/api/yahoo_client.py src/api/__init__.py config/settings.py src/agents/yahoo_auth.py utils/setup_yahoo_auth.py utils/reauth_yahoo.py utils/refresh_yahoo_token.py utils/verify_setup.py tests/unit/test_yahoo_credentials.py tests/unit/test_api_client.py tests/unit/test_yahoo_review_fixes.py tests/unit/test_league_discovery.py` -> exit 0.
 
 ### Review-fix self-review
-- Grep review confirmed active config/deployment/verify surfaces use canonical Yahoo environment names; remaining `YAHOO_CLIENT_ID` / `YAHOO_CLIENT_SECRET` references are third-party `yfpy` constructor keyword names or negative legacy-name tests.
+- Second review fix corrected the prior false claim: active setup/DataFetcher code now uses pinned yfpy lowercase constructor keywords; remaining uppercase Yahoo names in tests are legacy-negative assertions, not yfpy parameters.
 - Grep review confirmed no `yahoo_tokens.json`, token-prefix stdout, auth-URL stdout/logging, or refresh utility MCP-config shim remains in production code.
+
+## Second Review Fix
+- Resolved `TASK4-YFPY-CONSTRUCTOR-BINDING`: `utils/setup_yahoo_auth.py` and `src/agents/data_fetcher.py` now call pinned `yfpy==17.0.0` with `yahoo_consumer_key` / `yahoo_consumer_secret`, pass a `Path` directory for `env_file_location`, and keep `save_token_data_to_env_file=False`.
+- Re-resolved `TASK4-PERSISTENCE-INTEGRITY`: `YahooAuth` now raises a secret-safe `YahooTokenPersistenceError` when the shared persistence seam fails. Authentication and refresh set `AUTHENTICATED` only after `_save_tokens` completes, refresh keeps the previous in-memory tokens if persistence fails, and the expired-token refresh path propagates persistence failure instead of falling back to new auth.
+- Resolved `TASK4-REFRESH-CLI-STATUS`: `utils/refresh_yahoo_token.py` now exposes `main()`, returns nonzero for refresh or verification failure, exits nonzero when run as `__main__`, avoids printing completion on failed verification, and reuses the shared provisioning classifier/message for Fantasy API provisioning failures.
+- Re-resolved focused-test gaps: added real pinned-signature coverage, strict non-`**kwargs` yfpy constructor fakes for setup/DataFetcherAgent, forced YahooAuth persistence-failure caller tests for authenticate and refresh, and refresh CLI exit/message/SystemExit tests.
+- Removed the false report claim that uppercase `YAHOO_CLIENT_ID` / `YAHOO_CLIENT_SECRET` are yfpy constructor parameter names.
+
+### Second review-fix TDD / Verification
+- RED: `.venv/bin/python -m pytest tests/unit/test_yahoo_review_fixes.py tests/unit/test_league_discovery.py -q` failed with 8 expected regressions: missing `YahooTokenPersistenceError`, DataFetcherAgent still passing `YAHOO_CLIENT_ID`, refresh utility lacking `main` / `YAHOO_PROVISIONING_MESSAGE`, and setup failing the strict pinned-yfpy constructor fake.
+- GREEN: `.venv/bin/python -m pytest tests/unit/test_yahoo_credentials.py tests/unit/test_api_client.py tests/unit/test_yahoo_review_fixes.py tests/unit/test_league_discovery.py -q` -> `55 passed`.
+- Real yfpy constructor check: `.venv/bin/python - <<'PY' ... YahooFantasySportsQuery(... yahoo_consumer_key=..., yahoo_consumer_secret=..., env_file_location=Path(tmp), save_token_data_to_env_file=False, offline=True) ... PY` -> `yfpy constructor accepted lowercase consumer keywords and Path env_file_location`.
+- Compile check: `.venv/bin/python -m py_compile src/agents/data_fetcher.py src/agents/yahoo_auth.py utils/setup_yahoo_auth.py utils/refresh_yahoo_token.py tests/unit/test_league_discovery.py tests/unit/test_yahoo_review_fixes.py` -> exit 0.
+
+### Second review-fix concerns
+- Focused test output still includes pre-existing Pydantic v2 deprecation warnings from model imports; no token values were printed.

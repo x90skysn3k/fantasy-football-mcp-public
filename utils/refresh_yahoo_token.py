@@ -10,8 +10,10 @@ import requests
 
 from src.api.yahoo_credentials import (
     PROJECT_ENV_PATH,
+    YAHOO_PROVISIONING_MESSAGE,
     YahooCredentialError,
     get_yahoo_consumer_credentials,
+    is_yahoo_provisioning_failure,
     load_project_environment,
     persist_yahoo_tokens,
 )
@@ -78,6 +80,9 @@ def test_new_token():
         if response.status_code == 200:
             print("Token test successful! API is accessible.")
             return True
+        if is_yahoo_provisioning_failure(response.status_code, response.text):
+            print(YAHOO_PROVISIONING_MESSAGE)
+            return False
         print(f"Token test failed: {response.status_code}")
         return False
     except Exception:
@@ -85,24 +90,41 @@ def test_new_token():
         return False
 
 
-if __name__ == "__main__":
+def _print_failure_troubleshooting():
+    print("\n" + "=" * 60)
+    print("Token refresh failed")
+    print("=" * 60)
+    print("\nTroubleshooting:")
+    print("1. Check your internet connection")
+    print("2. Verify YAHOO_CONSUMER_KEY/YAHOO_CONSUMER_SECRET in .env")
+    print("3. If refresh token is expired, run: python utils/setup_yahoo_auth.py")
+    print("4. Check Yahoo Developer App provisioning")
+
+
+def main():
     print("=" * 60)
     print("Yahoo Fantasy Sports Token Refresh")
     print("=" * 60)
     print()
 
-    if refresh_yahoo_token():
-        print("\nTesting new token...")
-        test_new_token()
+    if not refresh_yahoo_token():
+        _print_failure_troubleshooting()
+        return 1
+
+    print("\nTesting new token...")
+    if not test_new_token():
         print("\n" + "=" * 60)
-        print("Token refresh complete!")
+        print("Token verification failed")
         print("=" * 60)
-    else:
-        print("\n" + "=" * 60)
-        print("Token refresh failed")
-        print("=" * 60)
-        print("\nTroubleshooting:")
-        print("1. Check your internet connection")
-        print("2. Verify YAHOO_CONSUMER_KEY/YAHOO_CONSUMER_SECRET in .env")
-        print("3. If refresh token is expired, run: python utils/setup_yahoo_auth.py")
-        print("4. Check Yahoo Developer App provisioning")
+        return 1
+
+    print("\n" + "=" * 60)
+    print("Token refresh complete!")
+    print("=" * 60)
+    return 0
+
+
+if __name__ == "__main__":
+    import sys
+
+    sys.exit(main())

@@ -90,6 +90,12 @@ class YahooInvalidGrantError(YahooAuthError):
 
     pass
 
+class YahooTokenPersistenceError(YahooAuthError):
+    """Raised when refreshed Yahoo tokens cannot be saved durably."""
+
+    pass
+
+
 
 class CallbackHandler(BaseHTTPRequestHandler):
     """HTTP request handler for OAuth callback."""
@@ -249,22 +255,26 @@ class YahooAuth:
             self.auth_state = AuthState.AUTHENTICATED
             logger.info(f"Loaded valid Yahoo tokens (expires in {self.tokens.expires_in_seconds}s)")
 
-    def _save_tokens(self) -> None:
+    def _save_tokens(self, tokens: Optional[YahooTokens] = None) -> None:
         """Save tokens only through the shared checkout .env seam."""
-        if not self.tokens:
+        tokens_to_save = tokens or self.tokens
+        if not tokens_to_save:
             return
 
         try:
-            expires_in = max(1, self.tokens.expires_in_seconds)
+            expires_in = max(1, tokens_to_save.expires_in_seconds)
             persist_yahoo_tokens(
-                self.tokens.access_token,
-                self.tokens.refresh_token,
+                tokens_to_save.access_token,
+                tokens_to_save.refresh_token,
                 expires_in,
                 env_path=PROJECT_ENV_PATH,
             )
             logger.debug("Tokens saved through project environment seam")
-        except Exception:
+        except Exception as error:
             logger.error("Failed to save Yahoo tokens")
+            raise YahooTokenPersistenceError(
+                "Failed to save Yahoo tokens to the project environment"
+            ) from error
 
     def _generate_pkce_challenge(self) -> Tuple[str, str]:
         """Generate PKCE code verifier and challenge for OAuth2."""
@@ -376,6 +386,8 @@ class YahooAuth:
         if self.tokens and self.auth_state == AuthState.TOKEN_EXPIRED:
             try:
                 return await self.refresh_tokens()
+            except YahooTokenPersistenceError:
+                raise
             except Exception:
                 logger.warning("Token refresh failed, proceeding with new auth")
 
@@ -424,9 +436,9 @@ class YahooAuth:
             # Exchange code for tokens
             tokens = await self._exchange_code_for_tokens(auth_code)
 
+            self._save_tokens(tokens)
             self.tokens = tokens
             self.auth_state = AuthState.AUTHENTICATED
-            self._save_tokens()
 
             logger.info("Authentication successful!")
             return tokens
@@ -577,7 +589,7 @@ class YahooAuth:
 
                         expires_at = datetime.now() + timedelta(seconds=expires_in)
 
-                        self.tokens = YahooTokens(
+                        new_tokens = YahooTokens(
                             access_token=access_token,
                             refresh_token=refresh_token,
                             token_type=token_type,
@@ -585,12 +597,16 @@ class YahooAuth:
                             scope=scope,
                         )
 
+                        self._save_tokens(new_tokens)
+                        self.tokens = new_tokens
                         self.auth_state = AuthState.AUTHENTICATED
-                        self._save_tokens()
 
                         logger.info(f"Tokens refreshed, expires at {expires_at}")
                         return self.tokens
 
+            except YahooTokenPersistenceError:
+                self.auth_state = AuthState.REFRESH_FAILED
+                raise
             except YahooTokenExpiredError:
                 raise  # Don't retry refresh token expired errors
             except Exception:

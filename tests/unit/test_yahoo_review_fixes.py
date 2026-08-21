@@ -3,6 +3,8 @@
 import asyncio
 import importlib
 import multiprocessing
+import runpy
+import inspect
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -273,17 +275,20 @@ class _AuthSession:
         return self.response
 
 
-def test_yahoo_auth_persists_only_through_credential_seam_without_json_store(tmp_path, monkeypatch, capsys):
-    yahoo_auth = _load_yahoo_auth_module()
-
-    cache_dir = tmp_path / "cache"
-    settings = SimpleNamespace(
+def _yahoo_auth_settings(cache_dir):
+    return SimpleNamespace(
         yahoo_client_id="client-id",
         yahoo_client_secret="client-secret",
         yahoo_callback_host="localhost",
         yahoo_callback_port=8090,
         cache_dir=cache_dir,
     )
+
+
+def test_yahoo_auth_persists_only_through_credential_seam_without_json_store(tmp_path, monkeypatch, capsys):
+    yahoo_auth = _load_yahoo_auth_module()
+
+    cache_dir = tmp_path / "cache"
     persist_calls = []
     monkeypatch.setattr(
         yahoo_auth,
@@ -291,7 +296,7 @@ def test_yahoo_auth_persists_only_through_credential_seam_without_json_store(tmp
         lambda access, refresh, expires, **kwargs: persist_calls.append((access, refresh, expires, kwargs)),
         raising=False,
     )
-    auth = yahoo_auth.YahooAuth(settings)
+    auth = yahoo_auth.YahooAuth(_yahoo_auth_settings(cache_dir))
     auth.tokens = yahoo_auth.YahooTokens(
         access_token="sentinel-access-token",
         refresh_token="sentinel-refresh-token",
@@ -307,17 +312,100 @@ def test_yahoo_auth_persists_only_through_credential_seam_without_json_store(tmp
     assert "sentinel-refresh-token" not in output
 
 
+def test_yahoo_auth_authenticate_reports_failure_when_persistence_fails(tmp_path, monkeypatch):
+    yahoo_auth = _load_yahoo_auth_module()
+    auth = yahoo_auth.YahooAuth(_yahoo_auth_settings(tmp_path / "cache"))
+    event = yahoo_auth.threading.Event()
+    event.set()
+    auth._auth_event = event
+    auth._auth_result = ("auth-code", None)
+
+    async def exchange_code(_auth_code):
+        return yahoo_auth.YahooTokens(
+            access_token="sentinel-access-token",
+            refresh_token="sentinel-refresh-token",
+            expires_at=datetime.now() + timedelta(seconds=3600),
+        )
+
+    def fail_persist(*_args, **_kwargs):
+        raise OSError("sentinel-secret-path")
+
+    monkeypatch.setattr(auth, "_start_callback_server", lambda: None)
+    monkeypatch.setattr(auth, "_exchange_code_for_tokens", exchange_code)
+    monkeypatch.setattr(yahoo_auth, "persist_yahoo_tokens", fail_persist)
+
+    with pytest.raises(yahoo_auth.YahooTokenPersistenceError) as excinfo:
+        asyncio.run(auth.authenticate(auto_open_browser=False))
+
+    assert "sentinel-secret-path" not in str(excinfo.value)
+    assert auth.auth_state != yahoo_auth.AuthState.AUTHENTICATED
+    assert auth.is_authenticated is False
+
+
+def test_yahoo_auth_refresh_reports_failure_when_persistence_fails(tmp_path, monkeypatch):
+    yahoo_auth = _load_yahoo_auth_module()
+    auth = yahoo_auth.YahooAuth(_yahoo_auth_settings(tmp_path / "cache"))
+    auth.tokens = yahoo_auth.YahooTokens(
+        access_token="old-access",
+        refresh_token="old-refresh",
+        expires_at=datetime.now() - timedelta(seconds=1),
+    )
+    session = _AuthSession(
+        _AuthResponse(
+            200,
+            {
+                "access_token": "sentinel-new-access-token",
+                "refresh_token": "sentinel-new-refresh-token",
+                "expires_in": 3600,
+            },
+        )
+    )
+
+    def fail_persist(*_args, **_kwargs):
+        raise OSError("sentinel-secret-path")
+
+    monkeypatch.setattr(yahoo_auth.aiohttp, "ClientSession", lambda: session)
+    monkeypatch.setattr(yahoo_auth, "persist_yahoo_tokens", fail_persist)
+
+    with pytest.raises(yahoo_auth.YahooTokenPersistenceError) as excinfo:
+        asyncio.run(auth.refresh_tokens())
+
+    assert "sentinel-secret-path" not in str(excinfo.value)
+    assert auth.auth_state != yahoo_auth.AuthState.AUTHENTICATED
+    assert auth.tokens.access_token == "old-access"
+    assert session.post_calls == 1
+
+
+def test_yahoo_auth_authenticate_propagates_expired_token_refresh_persistence_failure(
+    tmp_path, monkeypatch
+):
+    yahoo_auth = _load_yahoo_auth_module()
+    auth = yahoo_auth.YahooAuth(_yahoo_auth_settings(tmp_path / "cache"))
+    auth.tokens = yahoo_auth.YahooTokens(
+        access_token="old-access",
+        refresh_token="old-refresh",
+        expires_at=datetime.now() - timedelta(seconds=1),
+    )
+    auth.auth_state = yahoo_auth.AuthState.TOKEN_EXPIRED
+
+    async def fail_refresh():
+        raise yahoo_auth.YahooTokenPersistenceError(
+            "Failed to save Yahoo tokens to the project environment"
+        )
+
+    def fail_if_new_auth_starts():
+        raise AssertionError("persistence failure must not fall back to new auth")
+
+    monkeypatch.setattr(auth, "refresh_tokens", fail_refresh)
+    monkeypatch.setattr(auth, "_start_callback_server", fail_if_new_auth_starts)
+
+    with pytest.raises(yahoo_auth.YahooTokenPersistenceError):
+        asyncio.run(auth.authenticate(auto_open_browser=False))
+
 def test_yahoo_auth_refresh_attempts_once_not_three_times(tmp_path, monkeypatch):
     yahoo_auth = _load_yahoo_auth_module()
 
-    settings = SimpleNamespace(
-        yahoo_client_id="client-id",
-        yahoo_client_secret="client-secret",
-        yahoo_callback_host="localhost",
-        yahoo_callback_port=8090,
-        cache_dir=tmp_path / "cache",
-    )
-    auth = yahoo_auth.YahooAuth(settings)
+    auth = yahoo_auth.YahooAuth(_yahoo_auth_settings(tmp_path / "cache"))
     auth.tokens = yahoo_auth.YahooTokens(
         access_token="old-access",
         refresh_token="old-refresh",
@@ -330,3 +418,158 @@ def test_yahoo_auth_refresh_attempts_once_not_three_times(tmp_path, monkeypatch)
         asyncio.run(auth.refresh_tokens())
 
     assert session.post_calls == 1
+
+
+def test_pinned_yfpy_constructor_signature_requires_lowercase_consumer_names():
+    from yfpy import YahooFantasySportsQuery
+
+    parameters = inspect.signature(YahooFantasySportsQuery.__init__).parameters
+
+    assert "yahoo_consumer_key" in parameters
+    assert "yahoo_consumer_secret" in parameters
+    assert "YAHOO_CLIENT_ID" not in parameters
+    assert "YAHOO_CLIENT_SECRET" not in parameters
+    assert all(parameter.kind != inspect.Parameter.VAR_KEYWORD for parameter in parameters.values())
+
+
+@pytest.mark.asyncio
+async def test_data_fetcher_uses_pinned_yfpy_constructor_names(monkeypatch, tmp_path):
+    from src.agents import data_fetcher
+
+    init_kwargs = {}
+
+    class FakeYahooFantasySportsQuery:
+        def __init__(
+            self,
+            league_id,
+            game_code,
+            game_id=None,
+            yahoo_consumer_key=None,
+            yahoo_consumer_secret=None,
+            yahoo_access_token_json=None,
+            env_var_fallback=True,
+            env_file_location=None,
+            save_token_data_to_env_file=False,
+            all_output_as_json_str=False,
+            browser_callback=True,
+            retries=3,
+            backoff=0,
+            offline=False,
+        ):
+            init_kwargs.update(
+                {
+                    "league_id": league_id,
+                    "game_code": game_code,
+                    "game_id": game_id,
+                    "yahoo_consumer_key": yahoo_consumer_key,
+                    "yahoo_consumer_secret": yahoo_consumer_secret,
+                    "yahoo_access_token_json": yahoo_access_token_json,
+                    "env_var_fallback": env_var_fallback,
+                    "env_file_location": env_file_location,
+                    "save_token_data_to_env_file": save_token_data_to_env_file,
+                    "all_output_as_json_str": all_output_as_json_str,
+                    "browser_callback": browser_callback,
+                    "retries": retries,
+                    "backoff": backoff,
+                    "offline": offline,
+                }
+            )
+
+    settings = SimpleNamespace(
+        yahoo_client_id="client-id",
+        yahoo_client_secret="client-secret",
+        yahoo_api_rate_limit=100,
+        yahoo_api_rate_window_seconds=3600,
+        max_workers=1,
+        async_timeout_seconds=30,
+    )
+    monkeypatch.setattr(data_fetcher, "YahooFantasySportsQuery", FakeYahooFantasySportsQuery)
+    monkeypatch.setattr(data_fetcher, "ENV_FILE_PATH", tmp_path / ".env")
+
+    agent = data_fetcher.DataFetcherAgent(settings, cache_manager=SimpleNamespace())
+    await agent._initialize_yahoo_client()
+
+    assert init_kwargs["yahoo_consumer_key"] == "client-id"
+    assert init_kwargs["yahoo_consumer_secret"] == "client-secret"
+    assert init_kwargs["env_file_location"] == tmp_path
+    assert init_kwargs["save_token_data_to_env_file"] is False
+
+
+def test_refresh_cli_returns_nonzero_when_refresh_fails(monkeypatch, capsys):
+    from utils import refresh_yahoo_token
+
+    monkeypatch.setattr(refresh_yahoo_token, "refresh_yahoo_token", lambda: False)
+    monkeypatch.setattr(
+        refresh_yahoo_token,
+        "test_new_token",
+        lambda: (_ for _ in ()).throw(AssertionError("verification should not run")),
+    )
+
+    assert refresh_yahoo_token.main() == 1
+
+    output = capsys.readouterr().out
+    assert "Token refresh failed" in output
+    assert "Token refresh complete" not in output
+
+
+def test_refresh_cli_returns_nonzero_when_verification_fails(monkeypatch, capsys):
+    from utils import refresh_yahoo_token
+
+    monkeypatch.setattr(refresh_yahoo_token, "refresh_yahoo_token", lambda: True)
+    monkeypatch.setattr(refresh_yahoo_token, "test_new_token", lambda: False)
+
+    assert refresh_yahoo_token.main() == 1
+
+    output = capsys.readouterr().out
+    assert "Token verification failed" in output
+    assert "Token refresh complete" not in output
+
+def test_refresh_cli_main_module_exits_nonzero_on_refresh_failure(monkeypatch):
+    import requests
+    from src.api import yahoo_credentials
+
+    class Response:
+        status_code = 400
+        text = ""
+
+    monkeypatch.setenv("YAHOO_CONSUMER_KEY", "client-id")
+    monkeypatch.setenv("YAHOO_CONSUMER_SECRET", "client-secret")
+    monkeypatch.setenv("YAHOO_REFRESH_TOKEN", "refresh-token")
+    monkeypatch.setattr(yahoo_credentials, "load_dotenv", lambda *args, **kwargs: None)
+    monkeypatch.setattr(requests, "post", lambda *args, **kwargs: Response())
+
+    with pytest.raises(SystemExit) as excinfo:
+        runpy.run_module("utils.refresh_yahoo_token", run_name="__main__")
+
+    assert excinfo.value.code == 1
+
+
+
+def test_refresh_cli_returns_zero_only_after_refresh_and_verification_succeed(monkeypatch, capsys):
+    from utils import refresh_yahoo_token
+
+    monkeypatch.setattr(refresh_yahoo_token, "refresh_yahoo_token", lambda: True)
+    monkeypatch.setattr(refresh_yahoo_token, "test_new_token", lambda: True)
+
+    assert refresh_yahoo_token.main() == 0
+
+    output = capsys.readouterr().out
+    assert "Token refresh complete" in output
+
+
+def test_refresh_cli_classifies_provisioning_failure_with_shared_message(monkeypatch, capsys):
+    from utils import refresh_yahoo_token
+
+    class Response:
+        status_code = 403
+        text = '{"error":{"description":"This application is not authorized to perform this action."}}'
+
+    sentinel_access = "sentinel-access-token"
+    monkeypatch.setenv("YAHOO_ACCESS_TOKEN", sentinel_access)
+    monkeypatch.setattr(refresh_yahoo_token.requests, "get", lambda *args, **kwargs: Response())
+
+    assert refresh_yahoo_token.test_new_token() is False
+
+    output = capsys.readouterr().out
+    assert refresh_yahoo_token.YAHOO_PROVISIONING_MESSAGE in output
+    assert sentinel_access not in output
