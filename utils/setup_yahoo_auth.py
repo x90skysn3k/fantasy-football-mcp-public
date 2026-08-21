@@ -6,40 +6,36 @@ Run this script once to authenticate and save your token.
 
 import os
 import sys
-import json
 import webbrowser
 import base64
 import requests
 from pathlib import Path
-from dotenv import load_dotenv
 
-# Find project root (where .env file is located)
-SCRIPT_DIR = Path(__file__).parent.absolute()
-PROJECT_ROOT = SCRIPT_DIR.parent
-ENV_FILE_PATH = PROJECT_ROOT / ".env"
+from src.api.yahoo_credentials import (
+    PROJECT_ENV_PATH,
+    YahooCredentialError,
+    get_yahoo_consumer_credentials,
+    load_project_environment,
+    persist_yahoo_tokens,
+)
 
-# Load environment variables from project root
-load_dotenv(dotenv_path=ENV_FILE_PATH)
+PROJECT_ROOT = PROJECT_ENV_PATH.parent
+ENV_FILE_PATH = PROJECT_ENV_PATH
+load_project_environment()
 
 print("=" * 70)
 print("🏈 YAHOO FANTASY API - ONE-TIME AUTHENTICATION SETUP")
 print("=" * 70)
 print()
 
-# Your credentials from .env
-CLIENT_ID = os.getenv("YAHOO_CLIENT_ID")
-CLIENT_SECRET = os.getenv("YAHOO_CLIENT_SECRET")
-
-if not CLIENT_ID or not CLIENT_SECRET:
-    print("❌ ERROR: Yahoo credentials not found in .env file")
-    print("Please make sure your .env file contains:")
-    print("  YAHOO_CLIENT_ID=your_client_id")
-    print("  YAHOO_CLIENT_SECRET=your_client_secret")
+try:
+    CLIENT_ID, CLIENT_SECRET = get_yahoo_consumer_credentials()
+except YahooCredentialError as error:
+    print("ERROR: Yahoo credentials not found in .env file")
+    print(f"Required: {error}")
     sys.exit(1)
 
-print("✅ Found Yahoo credentials")
-print(f"   Client ID: {CLIENT_ID[:30]}...")
-print(f"   Client Secret: {CLIENT_SECRET[:10]}...")
+print("Found Yahoo credentials.")
 print()
 
 def preflight_fantasy_access(access_token):
@@ -59,15 +55,18 @@ def preflight_fantasy_access(access_token):
             headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
             timeout=30,
         )
-    except requests.exceptions.RequestException as e:
-        print(f"⚠️  Preflight request failed to send: {e}")
+    except requests.exceptions.RequestException:
+        print("Preflight request failed to send.")
         print("   Could not determine provisioning status.")
         return False
 
     if response.status_code == 200:
         print("✅ Fantasy Sports API access confirmed - your app is provisioned.")
         return True
-    if response.status_code == 401 and "additional_authorization_required" in response.text:
+    if (response.status_code == 401 and "additional_authorization_required" in response.text) or (
+        response.status_code == 403
+        and "This application is not authorized to perform this action." in response.text
+    ):
         print("❌ Your tokens are VALID, but your Yahoo app is NOT provisioned for")
         print("   the Fantasy Sports API. This is not a token problem - re-running")
         print("   this setup, refreshing tokens, or recreating the app will not fix it.")
@@ -75,9 +74,9 @@ def preflight_fantasy_access(access_token):
         print("   Apply for access at: https://sports.yahoo.com/developer/access/")
         print("   Include your existing Client ID so approval attaches to this app.")
         print("   Approval is a manual review with no published turnaround time;")
-        print("   every Fantasy API call will keep returning 401 until it lands.")
+        print("   every Fantasy API call will keep returning authorization failures until it lands.")
         return False
-    print(f"⚠️  Preflight returned status {response.status_code}: {response.text[:200]}")
+    print(f"Preflight returned status {response.status_code}")
     return False
 
 def _get_yfpy_game_attr(game, *names):
@@ -129,169 +128,39 @@ def exchange_verification_code_for_tokens(verification_code, client_id, client_s
         token_data = response.json()
         return token_data
     except requests.exceptions.RequestException as e:
-        print(f"❌ Error exchanging code for tokens: {e}")
+        print("Error exchanging code for tokens")
         if hasattr(e, 'response') and e.response is not None:
             try:
                 error_detail = e.response.json()
-                print(f"   Error details: {error_detail}")
+                print("   Yahoo returned an error response")
             except:
-                print(f"   Response: {e.response.text}")
+                print("   Yahoo returned an error response")
         return None
 
-def update_env_file_with_tokens(access_token, refresh_token, env_file_path, guid=None):
-    """Update .env file with access and refresh tokens."""
-    env_path = Path(env_file_path)
-    
-    # Read existing .env file
-    env_lines = []
-    if env_path.exists():
-        with open(env_path, 'r') as f:
-            env_lines = f.readlines()
-    
-    # Update or add token lines
-    updated_access = False
-    updated_refresh = False
-    updated_guid = False
+def update_env_file_with_tokens(access_token, refresh_token, env_file_path, guid=None, expires_in=3600):
+    """Persist OAuth tokens through the shared credential seam."""
+    persist_yahoo_tokens(access_token, refresh_token, int(expires_in), env_path=Path(env_file_path))
+    if guid:
+        _persist_guid(guid)
+    print(f"Updated {Path(env_file_path)} with Yahoo token metadata")
+
+
+def _persist_guid(guid):
+    lines = []
+    if ENV_FILE_PATH.exists():
+        lines = ENV_FILE_PATH.read_text(encoding="utf-8").splitlines(keepends=True)
+    updated = False
     new_lines = []
-    
-    for line in env_lines:
-        if line.startswith("YAHOO_ACCESS_TOKEN="):
-            new_lines.append(f"YAHOO_ACCESS_TOKEN={access_token}\n")
-            updated_access = True
-        elif line.startswith("YAHOO_REFRESH_TOKEN="):
-            new_lines.append(f"YAHOO_REFRESH_TOKEN={refresh_token}\n")
-            updated_refresh = True
-        elif line.startswith("YAHOO_GUID=") and guid:
+    for line in lines:
+        if line.startswith("YAHOO_GUID="):
             new_lines.append(f"YAHOO_GUID={guid}\n")
-            updated_guid = True
-        elif line.startswith("YAHOO_GUID=") and not guid:
-            # Keep existing GUID if new one not provided
-            new_lines.append(line)
-            updated_guid = True
+            updated = True
         else:
             new_lines.append(line)
-    
-    # Add tokens if they weren't found
-    if not updated_access:
-        new_lines.append(f"YAHOO_ACCESS_TOKEN={access_token}\n")
-    if not updated_refresh:
-        new_lines.append(f"YAHOO_REFRESH_TOKEN={refresh_token}\n")
-    if guid and not updated_guid:
+    if not updated:
         new_lines.append(f"YAHOO_GUID={guid}\n")
-    
-    # Write back to file
-    with open(env_path, 'w') as f:
-        f.writelines(new_lines)
-    
-    print(f"✅ Updated {env_path} with tokens")
-
-def update_mcp_configs(access_token, refresh_token, guid=None):
-    """Update Claude Desktop, Cursor, and Antigravity MCP config files with new tokens."""
-    import platform
-    
-    updated_configs = []
-    
-    # 1. Update Claude Desktop config (if it exists)
-    system = platform.system()
-    if system == 'Darwin':  # macOS
-        claude_config_path = Path.home() / 'Library' / 'Application Support' / 'Claude' / 'claude_desktop_config.json'
-    elif system == 'Windows':
-        claude_config_path = Path(os.environ.get('APPDATA', '')) / 'Claude' / 'claude_desktop_config.json'
-    else:  # Linux
-        claude_config_path = Path.home() / '.config' / 'Claude' / 'claude_desktop_config.json'
-    
-    if claude_config_path.exists():
-        try:
-            with open(claude_config_path, 'r') as f:
-                config = json.load(f)
-            
-            # Try both possible server names
-            server_names = ['fantasy-football', 'yahoo-fantasy-football']
-            updated = False
-            
-            for server_name in server_names:
-                if 'mcpServers' in config and server_name in config['mcpServers']:
-                    if 'env' not in config['mcpServers'][server_name]:
-                        config['mcpServers'][server_name]['env'] = {}
-                    
-                    config['mcpServers'][server_name]['env']['YAHOO_ACCESS_TOKEN'] = access_token
-                    config['mcpServers'][server_name]['env']['YAHOO_REFRESH_TOKEN'] = refresh_token
-                    if guid:
-                        config['mcpServers'][server_name]['env']['YAHOO_GUID'] = guid
-                    updated = True
-                    break
-            
-            if updated:
-                with open(claude_config_path, 'w') as f:
-                    json.dump(config, f, indent=2)
-                updated_configs.append('Claude Desktop config')
-        except Exception as e:
-            print(f"⚠️  Could not update Claude Desktop config: {e}")
-    
-    # 2. Update Cursor MCP config (if it exists)
-    cursor_config_path = Path.home() / '.cursor' / 'mcp.json'
-    if cursor_config_path.exists():
-        try:
-            with open(cursor_config_path, 'r') as f:
-                config = json.load(f)
-            
-            # Try both possible server names
-            server_names = ['yahoo-fantasy-football', 'fantasy-football']
-            updated = False
-            
-            for server_name in server_names:
-                if 'mcpServers' in config and server_name in config['mcpServers']:
-                    if 'env' not in config['mcpServers'][server_name]:
-                        config['mcpServers'][server_name]['env'] = {}
-                    
-                    config['mcpServers'][server_name]['env']['YAHOO_ACCESS_TOKEN'] = access_token
-                    config['mcpServers'][server_name]['env']['YAHOO_REFRESH_TOKEN'] = refresh_token
-                    if guid:
-                        config['mcpServers'][server_name]['env']['YAHOO_GUID'] = guid
-                    updated = True
-                    break
-            
-            if updated:
-                with open(cursor_config_path, 'w') as f:
-                    json.dump(config, f, indent=2)
-                updated_configs.append('Cursor MCP config')
-        except Exception as e:
-            print(f"⚠️  Could not update Cursor MCP config: {e}")
-    
-    # 3. Update Antigravity MCP config (if it exists)
-    antigravity_config_path = Path.home() / '.gemini' / 'antigravity' / 'mcp_config.json'
-    if antigravity_config_path.exists():
-        try:
-            with open(antigravity_config_path, 'r') as f:
-                config = json.load(f)
-            
-            # Try both possible server names
-            server_names = ['yahoo-fantasy-football', 'fantasy-football']
-            updated = False
-            
-            for server_name in server_names:
-                if 'mcpServers' in config and server_name in config['mcpServers']:
-                    if 'env' not in config['mcpServers'][server_name]:
-                        config['mcpServers'][server_name]['env'] = {}
-                    
-                    config['mcpServers'][server_name]['env']['YAHOO_ACCESS_TOKEN'] = access_token
-                    config['mcpServers'][server_name]['env']['YAHOO_REFRESH_TOKEN'] = refresh_token
-                    if guid:
-                        config['mcpServers'][server_name]['env']['YAHOO_GUID'] = guid
-                    updated = True
-                    break
-            
-            if updated:
-                with open(antigravity_config_path, 'w') as f:
-                    json.dump(config, f, indent=2)
-                updated_configs.append('Antigravity MCP config')
-        except Exception as e:
-            print(f"⚠️  Could not update Antigravity MCP config: {e}")
-    
-    if updated_configs:
-        print(f"✅ Updated tokens in: {', '.join(updated_configs)}")
-    else:
-        print("⚠️  No MCP config files found to update")
+    ENV_FILE_PATH.write_text("".join(new_lines), encoding="utf-8")
+    ENV_FILE_PATH.chmod(0o600)
 
 def manual_oauth_flow(client_id, client_secret):
     """Handle the manual OAuth flow (Method 2)."""
@@ -344,20 +213,16 @@ def manual_oauth_flow(client_id, client_secret):
         print("❌ Failed to exchange code for tokens.")
         return False
     
-    # Save token to file
-    token_file = PROJECT_ROOT / ".py.json"
-    with open(token_file, 'w') as f:
-        json.dump(token_data, f, indent=2)
-    
-    print(f"✅ Token saved to {token_file}")
-    
     # Update .env file with tokens
     access_token = token_data.get('access_token')
     refresh_token = token_data.get('refresh_token')
     if access_token and refresh_token:
-        update_env_file_with_tokens(access_token, refresh_token, ENV_FILE_PATH)
-        # Also update MCP config files
-        update_mcp_configs(access_token, refresh_token)
+        update_env_file_with_tokens(
+            access_token,
+            refresh_token,
+            ENV_FILE_PATH,
+            expires_in=token_data.get("expires_in", 3600),
+        )
     else:
         print("⚠️  Could not extract tokens from token_data to update .env")
     
@@ -401,8 +266,8 @@ try:
             YAHOO_CLIENT_ID=CLIENT_ID,
             YAHOO_CLIENT_SECRET=CLIENT_SECRET,
             browser_callback=True,  # Opens browser automatically
-            env_file_location=ENV_FILE_PATH,  # Save token to .env in project root
-            save_token_data_to_env_file=True  # Save for reuse
+            env_file_location=ENV_FILE_PATH,
+            save_token_data_to_env_file=False,
         )
         
         print()
@@ -425,20 +290,19 @@ try:
                     print(f"   {i}. {league_name} (ID: {league_id})")
             
             # Save token for MCP server use
-            token_file = PROJECT_ROOT / ".yahoo_token.json"
             if hasattr(query, 'oauth') and hasattr(query.oauth, 'token_data'):
                 token_data = query.oauth.token_data
-                with open(token_file, 'w') as f:
-                    json.dump(token_data, f, indent=2)
-                print(f"\n✅ Token saved to {token_file}")
-                
+
                 # Update .env file with tokens
                 access_token = token_data.get('access_token') or token_data.get('yahoo_access_token')
                 refresh_token = token_data.get('refresh_token') or token_data.get('yahoo_refresh_token')
                 if access_token and refresh_token:
-                    update_env_file_with_tokens(access_token, refresh_token, ENV_FILE_PATH)
-                    # Also update MCP config files
-                    update_mcp_configs(access_token, refresh_token)
+                    update_env_file_with_tokens(
+                        access_token,
+                        refresh_token,
+                        ENV_FILE_PATH,
+                        expires_in=token_data.get("expires_in", 3600),
+                    )
                     # Verify the app can actually reach the Fantasy API
                     preflight_fantasy_access(access_token)
                 else:
@@ -447,12 +311,12 @@ try:
 
                 print("   The MCP server can now use this token!")
             
-        except Exception as e:
-            print(f"⚠️  Connection test failed: {e}")
+        except Exception:
+            print("Connection test failed.")
             print("   But authentication may still be successful.")
             
-    except Exception as e:
-        print(f"\n❌ Authentication failed: {e}")
+    except Exception:
+        print("\nAuthentication failed.")
         print()
         print("Falling back to Method 2...")
         print()
@@ -476,13 +340,13 @@ print("NEXT STEPS")
 print("=" * 70)
 print()
 print("Once authenticated:")
-print("1. The token is saved to .yahoo_token.json")
-print("2. The MCP server will use this token automatically")
+print("1. The token is saved to the project .env file")
+print("2. MCP clients should not store Yahoo token values in their configs")
 print("3. Token will auto-refresh as needed")
 print()
 print("To use with MCP:")
-print("1. Add to your MCP config (Claude, etc.)")
-print("2. The server will use the saved token")
+print("1. Configure your MCP client to run this server from the checkout")
+print("2. The server will load the saved token from the checkout .env")
 print("3. Start making Fantasy Football API calls!")
 print()
 print("Need help? Check YAHOO_AUTH_REALITY.md for more details.")

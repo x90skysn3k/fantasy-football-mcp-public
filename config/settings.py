@@ -2,30 +2,23 @@
 Configuration settings for the Fantasy Football MCP server.
 """
 
-import os
 from pathlib import Path
-from typing import Optional
-from pydantic_settings import BaseSettings
-from pydantic import Field
 
-# Find project root (where .env file is located)
-# This module can be imported from various places, so we need to find the project root
-# Try to find the project root by looking for common markers
-_caller_file = Path(__file__)
-if _caller_file.parent.name == "config":
-    PROJECT_ROOT = _caller_file.parent.parent.absolute()
-else:
-    # Fallback: assume we're at the root or one level down
-    PROJECT_ROOT = _caller_file.parent.absolute()
-ENV_FILE_PATH = PROJECT_ROOT / ".env"
+from pydantic import Field
+from pydantic_settings import BaseSettings
+
+from src.api.yahoo_credentials import PROJECT_ENV_PATH, load_project_environment
+
+load_project_environment()
+ENV_FILE_PATH = PROJECT_ENV_PATH
 
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     # Yahoo API Configuration
-    yahoo_client_id: str = Field(..., env="YAHOO_CLIENT_ID")
-    yahoo_client_secret: str = Field(..., env="YAHOO_CLIENT_SECRET")
+    yahoo_client_id: str = Field(..., env="YAHOO_CONSUMER_KEY")
+    yahoo_client_secret: str = Field(..., env="YAHOO_CONSUMER_SECRET")
 
     # Cache Configuration
     cache_dir: Path = Field(default=Path("./.cache"), env="CACHE_DIR")

@@ -1,5 +1,11 @@
 """Yahoo API client module."""
 
+from .yahoo_credentials import (
+    PROJECT_ENV_PATH,
+    YahooProvisioningError,
+    load_project_environment,
+    persist_yahoo_tokens,
+)
 from .yahoo_client import (
     YAHOO_API_BASE,
     get_access_token,
@@ -9,6 +15,10 @@ from .yahoo_client import (
 )
 
 __all__ = [
+    "YahooProvisioningError",
+    "PROJECT_ENV_PATH",
+    "load_project_environment",
+    "persist_yahoo_tokens",
     "yahoo_api_call",
     "refresh_yahoo_token",
     "get_access_token",

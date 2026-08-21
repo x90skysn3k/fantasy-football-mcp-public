@@ -8,13 +8,19 @@ import json
 import os
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
-from dotenv import load_dotenv
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
 # Import extracted modules
-from src.api import get_access_token, refresh_yahoo_token, set_access_token, yahoo_api_call
+from src.api import (
+    PROJECT_ENV_PATH,
+    get_access_token,
+    load_project_environment,
+    refresh_yahoo_token,
+    set_access_token,
+    yahoo_api_call,
+)
 from src.parsers import parse_team_roster, parse_yahoo_free_agent_players
 from src.services import analyze_reddit_sentiment
 
@@ -28,9 +34,8 @@ from src.utils.season import resolve_fantasy_season
 # Import all handlers from the handlers module
 from pathlib import Path
 
-# Find project root and load .env from there
-PROJECT_ROOT = Path(__file__).parent.absolute()
-ENV_FILE_PATH = PROJECT_ROOT / ".env"
+PROJECT_ROOT = PROJECT_ENV_PATH.parent
+ENV_FILE_PATH = PROJECT_ENV_PATH
 
 from src.handlers import (
     handle_ff_analyze_draft_state,
@@ -61,8 +66,7 @@ from src.handlers import (
 # Draft functionality is built-in (no complex imports needed)
 DRAFT_AVAILABLE = True
 
-# Load environment from project root
-load_dotenv(dotenv_path=ENV_FILE_PATH)
+load_project_environment()
 
 # Initialize access token in the API module
 if os.getenv("YAHOO_ACCESS_TOKEN"):
