@@ -75,7 +75,7 @@ Flow:
 4. Produce starts/sits, waiver priorities, drop candidates, trade considerations, and watch-list items.
 5. Explain the recommendation's sensitivity to late news and state the next refresh deadline.
 
-The skill never sets a lineup, submits a waiver claim, proposes or accepts a Yahoo trade, or changes league settings.
+The skill may recommend trade targets or evaluate a proposed trade. It never submits, accepts, rejects, or cancels a Yahoo trade; sets a lineup; submits a waiver claim; or changes league settings.
 
 ## State Inputs
 
