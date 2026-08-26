@@ -1,153 +1,168 @@
 """
 Utility module for loading and managing NFL bye week data.
 
-Provides static bye week data as a fallback when API data is missing or invalid.
+Provides season-keyed static bye week data as a fallback when API data is
+missing or invalid.
 """
 
 import json
 import logging
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, Set
 
 logger = logging.getLogger(__name__)
 
-# Cache for loaded bye week data to avoid repeated file reads
-_BYE_WEEK_CACHE: Optional[Dict[str, int]] = None
+CANONICAL_TEAM_ABBRS: Set[str] = {
+    "ARI",
+    "ATL",
+    "BAL",
+    "BUF",
+    "CAR",
+    "CHI",
+    "CIN",
+    "CLE",
+    "DAL",
+    "DEN",
+    "DET",
+    "GB",
+    "HOU",
+    "IND",
+    "JAC",
+    "KC",
+    "LAC",
+    "LAR",
+    "LV",
+    "MIA",
+    "MIN",
+    "NE",
+    "NO",
+    "NYG",
+    "NYJ",
+    "PHI",
+    "PIT",
+    "SEA",
+    "SF",
+    "TB",
+    "TEN",
+    "WAS",
+}
+
+_DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+
+# Cache for loaded bye week data to avoid repeated file reads. Keyed by season so
+# callers cannot accidentally reuse one season's official dataset for another.
+_BYE_WEEK_CACHE: Dict[int, Dict[str, int]] = {}
 
 
-def load_static_bye_weeks() -> Dict[str, int]:
+def _is_valid_bye_week(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and 1 <= value <= 18
+
+
+def _validate_static_bye_weeks(season: int, bye_weeks: object) -> Dict[str, int]:
+    if not isinstance(bye_weeks, dict):
+        raise ValueError(f"Static bye week data for {season} must be a mapping")
+
+    team_keys = set(bye_weeks)
+    if team_keys != CANONICAL_TEAM_ABBRS:
+        missing = sorted(CANONICAL_TEAM_ABBRS - team_keys)
+        extra = sorted(team_keys - CANONICAL_TEAM_ABBRS)
+        details = []
+        if missing:
+            details.append(f"missing teams: {', '.join(missing)}")
+        if extra:
+            details.append(f"unexpected teams: {', '.join(extra)}")
+        raise ValueError(
+            f"Static bye week data for {season} has invalid team keys ({'; '.join(details)})"
+        )
+
+    validated: Dict[str, int] = {}
+    for team, week in bye_weeks.items():
+        if not isinstance(team, str) or not _is_valid_bye_week(week):
+            raise ValueError(f"Static bye week data for {season} has invalid bye week for {team}")
+        validated[team] = week
+
+    return validated
+
+
+def load_static_bye_weeks(season: int) -> Dict[str, int]:
     """
-    Load static bye week data from JSON file.
-    
-    Returns:
-        Dictionary mapping team abbreviations to bye week numbers.
-        Returns empty dict if file cannot be loaded.
+    Load strict static bye week data for a season.
+
+    Raises FileNotFoundError when the requested season has no dataset and
+    ValueError when a dataset is malformed. Missing or malformed data is never
+    converted to an empty fallback map.
     """
-    global _BYE_WEEK_CACHE
-    
-    # Return cached data if available
-    if _BYE_WEEK_CACHE is not None:
-        return _BYE_WEEK_CACHE
-    
-    try:
-        # Get the path to the static data file
-        data_file = Path(__file__).parent.parent / "data" / "bye_weeks_2025.json"
-        
-        with open(data_file, 'r') as f:
-            bye_weeks = json.load(f)
-        
-        # Validate the data structure
-        if not isinstance(bye_weeks, dict):
-            logger.error("Static bye week data is not a dictionary")
-            return {}
-        
-        # Validate all values are integers between 1 and 18
-        for team, week in bye_weeks.items():
-            if not isinstance(week, int) or not (1 <= week <= 18):
-                logger.warning(f"Invalid bye week {week} for team {team} in static data")
-        
-        # Cache the loaded data
-        _BYE_WEEK_CACHE = bye_weeks
-        logger.info(f"Loaded static bye week data for {len(bye_weeks)} teams")
-        
-        return bye_weeks
-        
-    except FileNotFoundError:
-        logger.error("Static bye week data file not found")
-        return {}
-    except json.JSONDecodeError as e:
-        logger.error(f"Error parsing static bye week data: {e}")
-        return {}
-    except Exception as e:
-        logger.error(f"Unexpected error loading static bye week data: {e}")
-        return {}
+    if season in _BYE_WEEK_CACHE:
+        return _BYE_WEEK_CACHE[season]
+
+    data_file = _DATA_DIR / f"bye_weeks_{season}.json"
+    with data_file.open("r", encoding="utf-8") as file:
+        loaded = json.load(file)
+
+    bye_weeks = _validate_static_bye_weeks(season, loaded)
+    _BYE_WEEK_CACHE[season] = bye_weeks
+    logger.info("Loaded static bye week data for %s teams in %s", len(bye_weeks), season)
+    return bye_weeks
 
 
 def get_bye_week_with_fallback(
     team_abbr: str,
-    api_bye_week: Optional[int] = None
+    api_bye_week: Optional[int] = None,
+    *,
+    season: int,
 ) -> Optional[int]:
     """
-    Get bye week for a team, preferring static data as authoritative source.
-    
-    Static data contains the correct 2025 NFL bye weeks and is always used when available.
-    API data is only used as a fallback if the team is not in static data.
-    
-    Args:
-        team_abbr: Team abbreviation (e.g., "KC", "SF", "BUF")
-        api_bye_week: Bye week from API (if available, used only as fallback)
-    
-    Returns:
-        Bye week number (1-18) or None if not found.
+    Get bye week for a team using API-first semantics.
+
+    Valid API bye weeks are preferred without touching static data. Static
+    season data is used only when API data is absent or invalid for a canonical
+    team.
     """
-    # Load static data (authoritative source for 2025)
-    static_data = load_static_bye_weeks()
-    
-    # Always prefer static data when available
-    if team_abbr in static_data:
-        bye_week = static_data[team_abbr]
-        if api_bye_week is not None and api_bye_week != bye_week and 1 <= api_bye_week <= 18:
-            logger.debug(
-                f"Using static bye week {bye_week} for {team_abbr} "
-                f"(overriding API value: {api_bye_week})"
-            )
-        return bye_week
-    
-    # Fall back to API data only if team not in static data
-    if api_bye_week is not None and isinstance(api_bye_week, int) and 1 <= api_bye_week <= 18:
-        logger.info(
-            f"Using API bye week {api_bye_week} for {team_abbr} "
-            f"(team not in static data)"
-        )
+    if _is_valid_bye_week(api_bye_week):
         return api_bye_week
-    
-    logger.warning(f"No bye week data found for team {team_abbr} (static or API)")
-    return None
+
+    static_data = load_static_bye_weeks(season)
+    if team_abbr not in static_data:
+        logger.warning("No static bye week data found for unknown team %s in %s", team_abbr, season)
+        return None
+
+    return static_data[team_abbr]
 
 
 def build_team_bye_week_map(
-    api_team_data: Optional[Dict[str, int]] = None
+    season: int,
+    api_team_data: Optional[Dict[str, int]] = None,
 ) -> Dict[str, int]:
     """
-    Build a complete team-to-bye-week mapping with fallback support.
-    
-    Combines API data (if available) with static data to ensure all teams
-    have bye week information.
-    
-    Args:
-        api_team_data: Optional dictionary of team abbreviations to bye weeks from API
-    
-    Returns:
-        Dictionary mapping team abbreviations to bye week numbers.
+    Build a canonical team-to-bye-week mapping for a season.
+
+    Starts from strict static season data, then overlays valid canonical API bye
+    weeks. Unknown teams and malformed API values are ignored instead of being
+    added to the canonical map.
     """
-    # Start with static data as baseline
-    bye_week_map = load_static_bye_weeks().copy()
-    
-    # Override with API data where available and valid
-    if api_team_data:
-        valid_count = 0
-        invalid_count = 0
-        
-        for team, week in api_team_data.items():
-            if isinstance(week, int) and 1 <= week <= 18:
-                bye_week_map[team] = week
-                valid_count += 1
-            else:
-                invalid_count += 1
-                logger.warning(f"Ignoring invalid API bye week {week} for {team}")
-        
-        if valid_count > 0:
-            logger.info(f"Updated {valid_count} teams with API bye week data")
-        if invalid_count > 0:
-            logger.info(f"Kept static data for {invalid_count} teams due to invalid API data")
-    else:
-        logger.info("No API bye week data provided, using all static data")
-    
+    bye_week_map = load_static_bye_weeks(season).copy()
+
+    if not api_team_data:
+        return bye_week_map
+
+    for team, week in api_team_data.items():
+        if team not in CANONICAL_TEAM_ABBRS:
+            logger.warning("Ignoring API bye week for unknown team %s", team)
+            continue
+        if not _is_valid_bye_week(week):
+            logger.warning("Ignoring invalid API bye week %s for %s", week, team)
+            continue
+        bye_week_map[team] = week
+
     return bye_week_map
 
 
-def clear_cache():
-    """Clear the cached bye week data. Useful for testing or forcing a reload."""
-    global _BYE_WEEK_CACHE
-    _BYE_WEEK_CACHE = None
-    logger.debug("Bye week cache cleared")
+def clear_cache(season: Optional[int] = None) -> None:
+    """Clear cached bye week data for one season, or all seasons when omitted."""
+    if season is None:
+        _BYE_WEEK_CACHE.clear()
+        logger.debug("Bye week cache cleared")
+        return
+
+    _BYE_WEEK_CACHE.pop(season, None)
+    logger.debug("Bye week cache cleared for %s", season)

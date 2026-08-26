@@ -6,8 +6,9 @@ This test module verifies the bye week fixes implemented in:
 - src/services/player_enhancement.py (detect_bye_week)
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from src.parsers.yahoo_parsers import parse_yahoo_free_agent_players
 from src.services.player_enhancement import detect_bye_week, enhance_player_with_context
@@ -107,7 +108,7 @@ class TestYahooParserByeWeeks:
                 ]
             }
         }
-        result = parse_yahoo_free_agent_players(response)
+        result = parse_yahoo_free_agent_players(response, season=2026)
         assert len(result) == 1
         assert result[0]["bye"] == 7
 
@@ -137,7 +138,7 @@ class TestYahooParserByeWeeks:
                 ]
             }
         }
-        result = parse_yahoo_free_agent_players(response)
+        result = parse_yahoo_free_agent_players(response, season=2026)
         assert len(result) == 1
         assert result[0]["bye"] == 12
 
@@ -167,9 +168,9 @@ class TestYahooParserByeWeeks:
                 ]
             }
         }
-        result = parse_yahoo_free_agent_players(response)
+        result = parse_yahoo_free_agent_players(response, season=2026)
         assert len(result) == 1
-        assert result[0]["bye"] is None
+        assert result[0]["bye"] == 6
 
     def test_parse_free_agents_malformed_bye_weeks_dict(self):
         """Test handling of malformed bye_weeks dictionary."""
@@ -197,9 +198,9 @@ class TestYahooParserByeWeeks:
                 ]
             }
         }
-        result = parse_yahoo_free_agent_players(response)
+        result = parse_yahoo_free_agent_players(response, season=2026)
         assert len(result) == 1
-        assert result[0]["bye"] is None
+        assert result[0]["bye"] == 8
 
     def test_parse_free_agents_bye_week_out_of_range_high(self):
         """Test handling bye week number > 18."""
@@ -227,9 +228,9 @@ class TestYahooParserByeWeeks:
                 ]
             }
         }
-        result = parse_yahoo_free_agent_players(response)
+        result = parse_yahoo_free_agent_players(response, season=2026)
         assert len(result) == 1
-        assert result[0]["bye"] is None
+        assert result[0]["bye"] == 10
 
     def test_parse_free_agents_bye_week_out_of_range_low(self):
         """Test handling bye week number < 1."""
@@ -257,9 +258,9 @@ class TestYahooParserByeWeeks:
                 ]
             }
         }
-        result = parse_yahoo_free_agent_players(response)
+        result = parse_yahoo_free_agent_players(response, season=2026)
         assert len(result) == 1
-        assert result[0]["bye"] is None
+        assert result[0]["bye"] == 11
 
     def test_parse_free_agents_bye_week_non_numeric(self):
         """Test handling non-numeric bye week values."""
@@ -287,9 +288,9 @@ class TestYahooParserByeWeeks:
                 ]
             }
         }
-        result = parse_yahoo_free_agent_players(response)
+        result = parse_yahoo_free_agent_players(response, season=2026)
         assert len(result) == 1
-        assert result[0]["bye"] is None
+        assert result[0]["bye"] == 10
 
     def test_parse_free_agents_bye_week_empty_string(self):
         """Test handling empty string bye week value."""
@@ -317,9 +318,9 @@ class TestYahooParserByeWeeks:
                 ]
             }
         }
-        result = parse_yahoo_free_agent_players(response)
+        result = parse_yahoo_free_agent_players(response, season=2026)
         assert len(result) == 1
-        assert result[0]["bye"] is None
+        assert result[0]["bye"] == 14
 
     def test_parse_free_agents_bye_weeks_not_dict(self):
         """Test handling when bye_weeks is not a dictionary."""
@@ -347,9 +348,9 @@ class TestYahooParserByeWeeks:
                 ]
             }
         }
-        result = parse_yahoo_free_agent_players(response)
+        result = parse_yahoo_free_agent_players(response, season=2026)
         assert len(result) == 1
-        assert result[0]["bye"] is None
+        assert result[0]["bye"] == 11
 
     def test_parse_free_agents_multiple_players_mixed_bye_data(self):
         """Test parsing multiple players with mixed bye week data."""
@@ -401,11 +402,11 @@ class TestYahooParserByeWeeks:
                 ]
             }
         }
-        result = parse_yahoo_free_agent_players(response)
+        result = parse_yahoo_free_agent_players(response, season=2026)
         assert len(result) == 3
         assert result[0]["bye"] == 7
-        assert result[1]["bye"] is None
-        assert result[2]["bye"] is None
+        assert result[1]["bye"] == 7
+        assert result[2]["bye"] == 6
 
 
 class TestPlayerEnhancementByeWeeks:
@@ -426,7 +427,7 @@ class TestPlayerEnhancementByeWeeks:
         result = await enhance_player_with_context(
             player=player,
             current_week=7,
-            season=2025,
+            season=2026,
             sleeper_api=mock_sleeper_api,
         )
 
@@ -449,7 +450,7 @@ class TestPlayerEnhancementByeWeeks:
         result = await enhance_player_with_context(
             player=player,
             current_week=5,
-            season=2025,
+            season=2026,
             sleeper_api=mock_sleeper_api,
         )
 
@@ -470,7 +471,7 @@ class TestPlayerEnhancementByeWeeks:
         result = await enhance_player_with_context(
             player=player,
             current_week=7,
-            season=2025,
+            season=2026,
             sleeper_api=mock_sleeper_api,
         )
 
@@ -490,7 +491,7 @@ class TestPlayerEnhancementByeWeeks:
         result = await enhance_player_with_context(
             player=player,
             current_week=7,
-            season=2025,
+            season=2026,
             sleeper_api=mock_sleeper_api,
         )
 
@@ -502,13 +503,53 @@ class TestMainFunctionsByeWeeks:
     """Test bye week handling in main fantasy_football_multi_league.py functions."""
 
     @pytest.mark.asyncio
+    async def test_get_waiver_wire_players_propagates_malformed_season_error(self):
+        """Malformed season metadata must surface instead of returning an empty list."""
+        from fantasy_football_multi_league import get_waiver_wire_players
+
+        season_error = RuntimeError("Yahoo NFL game metadata has malformed season")
+        with (
+            patch(
+                "fantasy_football_multi_league._resolve_league_season",
+                AsyncMock(side_effect=season_error),
+            ),
+            patch(
+                "fantasy_football_multi_league.yahoo_api_call", new_callable=AsyncMock
+            ) as mock_api,
+        ):
+            with pytest.raises(RuntimeError, match="malformed season"):
+                await get_waiver_wire_players("461.l.61410")
+
+        mock_api.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_get_draft_rankings_propagates_malformed_season_error(self):
+        """Malformed season metadata must surface instead of returning an empty list."""
+        from fantasy_football_multi_league import get_draft_rankings
+
+        season_error = ValueError("Unsupported fantasy season metadata")
+        with (
+            patch(
+                "fantasy_football_multi_league._resolve_league_season",
+                AsyncMock(side_effect=season_error),
+            ),
+            patch(
+                "fantasy_football_multi_league.yahoo_api_call", new_callable=AsyncMock
+            ) as mock_api,
+        ):
+            with pytest.raises(ValueError, match="Unsupported fantasy season"):
+                await get_draft_rankings(league_key="461.l.61410")
+
+        mock_api.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_get_waiver_wire_players_bye_week_extraction(self):
         """Test that get_waiver_wire_players correctly extracts and validates bye weeks.
-        
-        Now with static fallback: invalid API data falls back to static 2025 bye weeks.
+
+        Now with static fallback: invalid API data falls back to static 2026 bye weeks.
         """
         from fantasy_football_multi_league import get_waiver_wire_players
-        
+
         mock_response = {
             "fantasy_content": {
                 "league": [
@@ -560,30 +601,35 @@ class TestMainFunctionsByeWeeks:
             }
         }
 
-        with patch("fantasy_football_multi_league.yahoo_api_call", new_callable=AsyncMock) as mock_api:
+        with (
+            patch(
+                "fantasy_football_multi_league.yahoo_api_call", new_callable=AsyncMock
+            ) as mock_api,
+            patch(
+                "fantasy_football_multi_league.discover_nfl_game", new_callable=AsyncMock
+            ) as mock_game,
+        ):
             mock_api.return_value = mock_response
-            
+            mock_game.return_value = {"game_key": "461", "season": 2026, "code": "nfl"}
+
             result = await get_waiver_wire_players(
-                league_key="461.l.61410",
-                position="all",
-                sort="rank",
-                count=30
+                league_key="461.l.61410", position="all", sort="rank", count=30
             )
 
             assert len(result) == 3
-            # Static data is authoritative - always used when available
-            assert result[0]["bye"] == 10  # KC static data (10) used (overriding API 7)
+            # Valid API data wins; missing/invalid data falls back to official 2026 data.
+            assert result[0]["bye"] == 7  # Valid Yahoo bye wins over official KC fallback (5)
             assert result[1]["bye"] == 7  # BUF static data (7) used (API 99 is invalid)
-            assert result[2]["bye"] == 12  # MIA static data (12) used (no API data)
+            assert result[2]["bye"] == 6  # No API data falls back to official 2026 MIA week
 
     @pytest.mark.asyncio
     async def test_get_draft_rankings_bye_week_validation(self):
         """Test that get_draft_rankings validates bye weeks correctly.
-        
-        Now with static fallback: invalid API data falls back to static 2025 bye weeks.
+
+        Now with static fallback: invalid API data falls back to static 2026 bye weeks.
         """
         from fantasy_football_multi_league import get_draft_rankings
-        
+
         mock_response = {
             "fantasy_content": {
                 "league": [
@@ -621,17 +667,19 @@ class TestMainFunctionsByeWeeks:
             }
         }
 
-        with patch("fantasy_football_multi_league.yahoo_api_call", new_callable=AsyncMock) as mock_api:
-            with patch("fantasy_football_multi_league.discover_leagues", new_callable=AsyncMock) as mock_discover:
-                mock_api.return_value = mock_response
-                mock_discover.return_value = {"461.l.61410": {"name": "Test League"}}
-                
-                result = await get_draft_rankings(
-                    league_key="461.l.61410",
-                    position="all",
-                    count=50
-                )
+        with (
+            patch(
+                "fantasy_football_multi_league.yahoo_api_call", new_callable=AsyncMock
+            ) as mock_api,
+            patch(
+                "fantasy_football_multi_league.discover_nfl_game", new_callable=AsyncMock
+            ) as mock_game,
+        ):
+            mock_api.return_value = mock_response
+            mock_game.return_value = {"game_key": "461", "season": 2026, "code": "nfl"}
 
-                assert len(result) == 2
-                assert result[0]["bye"] == 10  # Valid API bye week used
-                assert result[1]["bye"] == 7  # Invalid API (0) falls back to static (BUF = week 7)
+            result = await get_draft_rankings(league_key="461.l.61410", position="all", count=50)
+
+            assert len(result) == 2
+            assert result[0]["bye"] == 10  # Valid API bye week used
+            assert result[1]["bye"] == 7  # Invalid API (0) falls back to static (BUF = week 7)

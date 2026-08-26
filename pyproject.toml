@@ -7,10 +7,10 @@ name = "fantasy-football-mcp"
 version = "1.0.0"
 description = "Production-grade MCP server for Yahoo Fantasy Sports with sophisticated lineup optimization"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
-    {name = "Your Name", email = "your.email@example.com"}
+    {name = "x90skysn3k"}
 ]
 keywords = [
     "fantasy-football",
@@ -24,7 +24,6 @@ classifiers = [
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -33,7 +32,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "mcp>=1.2.0",
+    "mcp>=1.13.1,<1.14",
     "yfpy>=16.0.3",
     "pydantic>=2.10.4",
     "pydantic-settings>=2.0.0",
@@ -42,10 +41,11 @@ dependencies = [
     "aiohttp>=3.11.11",
     "aiocache>=0.12.3",
     "pandas>=2.2.3",
-    "numpy>=1.26.4",
+    "numpy>=1.26.4,<2.1",
     "loguru>=0.7.3",
     "click>=8.1.8",
-    "rich>=13.9.6"
+    "rich>=13.9.6",
+    "filelock>=3.16.1",
 ]
 
 [project.optional-dependencies]
@@ -55,29 +55,32 @@ dev = [
     "pytest-mock>=3.14.0",
     "pytest-cov>=6.0.0",
     "black>=24.10.0",
-    "mypy>=1.14.1",
+    "mypy>=1.14.1,<1.19",
     "ruff>=0.9.1",
     "ipython>=8.18.0"
 ]
 
 [project.scripts]
-fantasy-football-mcp = "src.mcp_server:main"
+fantasy-football-mcp = "fantasy_football_multi_league:cli_main"
 
 [project.urls]
-Homepage = "https://github.com/yourusername/fantasy-football-mcp"
-Documentation = "https://github.com/yourusername/fantasy-football-mcp/wiki"
-Repository = "https://github.com/yourusername/fantasy-football-mcp.git"
-Issues = "https://github.com/yourusername/fantasy-football-mcp/issues"
+Homepage = "https://github.com/x90skysn3k/fantasy-football-mcp-public"
+Documentation = "https://github.com/x90skysn3k/fantasy-football-mcp-public/wiki"
+Repository = "https://github.com/x90skysn3k/fantasy-football-mcp-public.git"
+Issues = "https://github.com/x90skysn3k/fantasy-football-mcp-public/issues"
 
 [tool.setuptools]
-packages = ["src"]
+py-modules = ["fantasy_football_multi_league"]
+
+[tool.setuptools.packages.find]
+include = ["src", "src.*"]
 
 [tool.setuptools.package-data]
-src = ["*.json", "*.yaml", "*.yml"]
+src = ["data/*.json", "*.json", "*.yaml", "*.yml"]
 
 [tool.black]
 line-length = 100
-target-version = ["py39", "py310", "py311", "py312"]
+target-version = ["py310", "py311", "py312"]
 include = '\.pyi?$'
 extend-exclude = '''
 /(
@@ -92,7 +95,7 @@ extend-exclude = '''
 
 [tool.ruff]
 line-length = 100
-target-version = "py39"
+target-version = "py310"
 
 [tool.ruff.lint]
 select = [
@@ -111,7 +114,7 @@ ignore = [
 ]
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.10"
 strict = true
 warn_return_any = true
 warn_unused_configs = true

@@ -7,31 +7,32 @@ and intelligent caching through the cache manager.
 """
 
 import asyncio
-import json
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Union, Tuple
-from dataclasses import dataclass
-from enum import Enum
 import hashlib
-import time
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from enum import Enum
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 import aiohttp
 from loguru import logger
 from yfpy import YahooFantasySportsQuery
-from yfpy.models import Game, League, Team, Player as YfpyPlayer, Roster, Matchup
+from yfpy.models import Player as YfpyPlayer
 
 from config.settings import Settings
+
 from ..models.player import (
-    Player,
     Position,
-    Team as NFLTeam,
-    InjuryReport,
-    InjuryStatus,
-    PlayerStats,
 )
-from ..models.matchup import Matchup as FantasyMatchup, GameStatus
-from ..models.lineup import Lineup
+from ..models.player import (
+    Team as NFLTeam,
+)
 from .cache_manager import CacheManagerAgent
+
+# Find project root (where .env file is located)
+# This file is in src/agents/, so project root is 2 levels up
+PROJECT_ROOT = Path(__file__).parent.parent.parent.absolute()
+ENV_FILE_PATH = PROJECT_ROOT / ".env"
 
 
 class APIEndpoint(str, Enum):
@@ -627,7 +628,8 @@ class DataFetcherAgent:
                 game_id=None,  # Will be determined from current season
                 yahoo_consumer_key=self.settings.yahoo_client_id,
                 yahoo_consumer_secret=self.settings.yahoo_client_secret,
-                env_file_location=".env",  # OAuth tokens stored here
+                env_file_location=ENV_FILE_PATH.parent,  # yfpy expects the .env directory
+                save_token_data_to_env_file=False,
             )
 
             logger.info("Yahoo API client initialized")

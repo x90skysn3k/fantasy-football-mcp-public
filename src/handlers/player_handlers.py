@@ -5,6 +5,8 @@ from typing import Any, Dict
 # These will be injected from main file
 yahoo_api_call = None
 get_waiver_wire_players = None
+parse_team_roster = None
+resolve_league_season = None
 
 
 async def handle_ff_get_players(arguments: dict) -> dict:
@@ -94,7 +96,7 @@ async def handle_ff_get_players(arguments: dict) -> dict:
         return result
 
     try:
-        from lineup_optimizer import lineup_optimizer, Player
+        from lineup_optimizer import Player, lineup_optimizer
     except ImportError as exc:
         result["note"] = f"Enhanced data unavailable: {exc}"
         return result
@@ -173,7 +175,7 @@ async def handle_ff_get_players(arguments: dict) -> dict:
                     # Adjust analysis for bye weeks
                     if player.on_bye:
                         base["free_agent_value"] = 0.0
-                        base["analysis"] = f"ON BYE - Do not add this week"
+                        base["analysis"] = "ON BYE - Do not add this week"
                     else:
                         base["free_agent_value"] = round(proj * (1 - owned / 100), 1)
                         analysis_parts = [f"Low ownership ({owned}%), proj ({proj:.1f})"]
@@ -242,17 +244,16 @@ async def handle_ff_compare_teams(arguments: dict) -> dict:
     Returns:
         Dict with comparison data
     """
-    from src.parsers import parse_team_roster
-
     league_key = arguments.get("league_key")
     team_key_a = arguments.get("team_key_a")
     team_key_b = arguments.get("team_key_b")
+    season = await resolve_league_season(league_key)
 
     data_a = await yahoo_api_call(f"team/{team_key_a}/roster")
     data_b = await yahoo_api_call(f"team/{team_key_b}/roster")
 
-    roster_a = parse_team_roster(data_a)
-    roster_b = parse_team_roster(data_b)
+    roster_a = parse_team_roster(data_a, season=season)
+    roster_b = parse_team_roster(data_b, season=season)
 
     return {
         "league_key": league_key,
@@ -313,7 +314,17 @@ async def handle_ff_get_waiver_wire(arguments: dict) -> dict:
     include_external_data = arguments.get("include_external_data", True)
 
     # Fetch basic Yahoo waiver players
-    basic_players = await get_waiver_wire_players(league_key, position, sort, count)
+    try:
+        basic_players = await get_waiver_wire_players(league_key, position, sort, count)
+    except Exception as exc:
+        return {
+            "status": "error",
+            "league_key": league_key,
+            "position": position,
+            "sort": sort,
+            "error": str(exc),
+            "message": "Failed to fetch waiver wire players from Yahoo",
+        }
     if not basic_players:
         return {
             "status": "success",
@@ -340,7 +351,7 @@ async def handle_ff_get_waiver_wire(arguments: dict) -> dict:
         return result
 
     try:
-        from lineup_optimizer import lineup_optimizer, Player
+        from lineup_optimizer import Player, lineup_optimizer
         from sleeper_api import get_trending_adds, sleeper_client
     except ImportError as exc:
         result["note"] = f"Enhanced data unavailable: {exc}"
@@ -373,7 +384,7 @@ async def handle_ff_get_waiver_wire(arguments: dict) -> dict:
                         player.expert_tier = "Depth"
                         player.expert_recommendation = "Monitor"
                         player.expert_confidence = 50
-                        player.expert_advice = f"Expert analysis unavailable"
+                        player.expert_advice = "Expert analysis unavailable"
 
             # Fetch and merge trending data
             trending = await get_trending_adds(count)

@@ -9,8 +9,9 @@ results based purely on the roster data already returned by the legacy layer.
 """
 
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, List, Optional, Sequence
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -146,6 +147,27 @@ def _normalize_position(raw: Any) -> str:
     return str(raw).upper()
 
 
+def _has_yahoo_roster_players(payload: Dict[str, Any]) -> bool:
+    """Return True when payload contains Yahoo's raw roster players container."""
+    fantasy_content = payload.get("fantasy_content")
+    if not isinstance(fantasy_content, dict):
+        return False
+    team = fantasy_content.get("team")
+    if not isinstance(team, list):
+        return False
+
+    for item in team:
+        if not isinstance(item, dict):
+            continue
+        roster_data = item.get("roster")
+        if not isinstance(roster_data, dict):
+            continue
+        for container in (roster_data.get("0"), roster_data, roster_data.get("roster")):
+            if isinstance(container, dict) and isinstance(container.get("players"), dict):
+                return True
+    return False
+
+
 def _calculate_match_confidence(match_method: str) -> float:
     """Calculate confidence score for Sleeper match quality."""
     if not match_method:
@@ -269,7 +291,9 @@ class LineupOptimizer:
     def __init__(self) -> None:
         pass
 
-    async def parse_yahoo_roster(self, roster_payload: Dict[str, Any]) -> List[Player]:
+    async def parse_yahoo_roster(
+        self, roster_payload: Dict[str, Any], *, season: Optional[int] = None
+    ) -> List[Player]:
         """Convert a roster payload into Player objects.
 
         Supports both the simplified JSON returned by ``ff_get_roster`` and the
@@ -281,12 +305,13 @@ class LineupOptimizer:
             roster_obj = roster_payload.get("roster")
             if isinstance(roster_obj, list):
                 entries = roster_obj
-            else:
-                # Fallback: try using the legacy parser for raw Yahoo data
+            elif _has_yahoo_roster_players(roster_payload):
+                if season is None:
+                    raise ValueError("season is required when parsing raw Yahoo roster payloads")
                 try:
                     from fantasy_football_multi_league import parse_team_roster  # type: ignore
 
-                    entries = parse_team_roster(roster_payload)
+                    entries = parse_team_roster(roster_payload, season=season)
                 except Exception:
                     entries = []
         players: List[Player] = []
@@ -366,10 +391,8 @@ class LineupOptimizer:
         match_analytics = MatchAnalytics()
 
         try:
-            from sleeper_api import sleeper_client
-
             # Get current season and week once for all players
-            from sleeper_api import get_current_season, get_current_week
+            from sleeper_api import get_current_season, get_current_week, sleeper_client
 
             current_season = await get_current_season()
             current_week = await get_current_week()

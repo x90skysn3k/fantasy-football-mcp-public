@@ -5,11 +5,12 @@ from typing import Any, Dict, List, Optional
 from src.utils.bye_weeks import get_bye_week_with_fallback
 
 
-def parse_team_roster(data: Dict) -> List[Dict]:
+def parse_team_roster(data: Dict, *, season: int) -> List[Dict]:
     """Extract a simple roster list from Yahoo team data.
 
     Args:
         data: Raw Yahoo API response from team/{team_key}/roster endpoint
+        season: Resolved fantasy season for official static bye-week fallback
 
     Returns:
         List of player dictionaries with name, position, team, status
@@ -138,7 +139,11 @@ def parse_team_roster(data: Dict) -> List[Dict]:
                     team_abbr = info.get("team")
                     api_bye_week = info.get("bye") if isinstance(info.get("bye"), int) else None
                     if isinstance(team_abbr, str) and team_abbr:
-                        resolved_bye = get_bye_week_with_fallback(team_abbr, api_bye_week)
+                        resolved_bye = get_bye_week_with_fallback(
+                            team_abbr,
+                            api_bye_week,
+                            season=season,
+                        )
                         info["bye"] = resolved_bye
                     else:
                         info["bye"] = None
@@ -148,11 +153,12 @@ def parse_team_roster(data: Dict) -> List[Dict]:
     return roster
 
 
-def parse_yahoo_free_agent_players(data: Dict) -> List[Dict]:
+def parse_yahoo_free_agent_players(data: Dict, *, season: int) -> List[Dict]:
     """Extract free agent/waiver players from Yahoo data, similar to team roster.
 
     Args:
         data: Raw Yahoo API response from league/{league_key}/players endpoint
+        season: Resolved fantasy season for official static bye-week fallback
 
     Returns:
         List of player dictionaries with name, position, team, ownership stats
@@ -181,6 +187,9 @@ def parse_yahoo_free_agent_players(data: Dict) -> List[Dict]:
                 name_dict = container.get("name")
                 if isinstance(name_dict, dict) and "full" in name_dict:
                     info["name"] = name_dict.get("full")
+                # Keys and player metadata
+                if "player_key" in container:
+                    info["player_key"] = container["player_key"]
                 # Position
                 if "display_position" in container:
                     info["position"] = container.get("display_position")
@@ -197,6 +206,20 @@ def parse_yahoo_free_agent_players(data: Dict) -> List[Dict]:
                     info["weekly_change"] = container["ownership"].get("weekly_change", 0)
                 if "percent_owned" in container:
                     info["owned_pct"] = container["percent_owned"]
+                # Draft analysis / ADP metadata
+                draft_analysis = container.get("draft_analysis")
+                if isinstance(draft_analysis, dict):
+                    for field in (
+                        "average_pick",
+                        "average_round",
+                        "average_cost",
+                        "percent_drafted",
+                        "average_draft_position",
+                    ):
+                        if field in draft_analysis:
+                            info[field] = draft_analysis[field]
+                    if "average_pick" in draft_analysis:
+                        info["average_draft_position"] = draft_analysis["average_pick"]
                 # Injury
                 if "status" in container:
                     info["injury_status"] = container["status"]
@@ -218,9 +241,6 @@ def parse_yahoo_free_agent_players(data: Dict) -> List[Dict]:
                             info["bye"] = None
                     else:
                         info["bye"] = None
-                else:
-                    # No bye_weeks field present
-                    info["bye"] = None
 
             for element in player_array:
                 if isinstance(element, dict):
@@ -230,6 +250,16 @@ def parse_yahoo_free_agent_players(data: Dict) -> List[Dict]:
                         _scan_free_agent(sub)
 
             if info and info.get("name"):
+                team_abbr = info.get("team")
+                api_bye_week = info.get("bye") if isinstance(info.get("bye"), int) else None
+                if isinstance(team_abbr, str) and team_abbr:
+                    info["bye"] = get_bye_week_with_fallback(
+                        team_abbr,
+                        api_bye_week,
+                        season=season,
+                    )
+                else:
+                    info["bye"] = None
                 players.append(info)
 
     return players

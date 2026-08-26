@@ -36,8 +36,8 @@ Successfully completed Phase 2b of the monolith refactoring by extracting ALL re
    - Dependencies: `get_all_teams_info`, `get_draft_rankings`, `get_draft_recommendation_simple`, `analyze_draft_state_simple`
 
 5. **`src/handlers/analytics_handlers.py`** (23 lines)
-   - `handle_ff_analyze_reddit_sentiment` - Reddit sentiment analysis
-   - Dependencies: Already extracted `analyze_reddit_sentiment` service
+   - `handle_ff_analyze_reddit_sentiment` - Optional Reddit sentiment analysis
+   - Dependencies: Already extracted `analyze_reddit_sentiment` service; tool registration requires `ENABLE_REDDIT_SENTIMENT=1` before MCP server startup
 
 ## Architecture Improvements
 
@@ -131,18 +131,18 @@ Comprehensive live API testing was performed to verify all MCP tool handlers wor
 | Matchup Handlers | 2 | 2 | 100% |
 | Player Handlers | 2 | 2 | 100% |
 | Draft Handlers | 4 | 4 | 100% |
-| Analytics Handlers | 1 | 1 | 100% |
+| Analytics Handlers | 1 | 1 | 100% (optional; requires `ENABLE_REDDIT_SENTIMENT=1` before startup) |
 
 #### Performance Highlights
 - **Fastest handler**: `ff_get_leagues` (0.00s - cached)
-- **Slowest handler**: `ff_analyze_reddit_sentiment` (5.54s - external API)
+- **Slowest handler**: `ff_analyze_reddit_sentiment` (5.54s - optional external API; requires `ENABLE_REDDIT_SENTIMENT=1` at startup)
 - **Most complex handler**: `ff_get_roster (standard)` (2.81s - multi-source data)
 
 #### Key Findings
 ✅ All handler dependency injections working correctly  
 ✅ Yahoo API integration functional after refactoring  
 ✅ Sleeper API integration still working (fallback projections active)  
-✅ Reddit API integration operational  
+✅ Reddit API integration operational when `ENABLE_REDDIT_SENTIMENT=1` is set before MCP server startup
 ✅ Cache and rate limiting systems functioning  
 ✅ No regressions detected in any handler domain  
 

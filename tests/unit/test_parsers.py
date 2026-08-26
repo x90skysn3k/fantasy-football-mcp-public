@@ -1,7 +1,5 @@
 """Unit tests for src/parsers/yahoo_parsers.py - Yahoo API response parsing."""
 
-import pytest
-
 from src.parsers.yahoo_parsers import parse_team_roster, parse_yahoo_free_agent_players
 
 
@@ -10,7 +8,7 @@ class TestParseTeamRoster:
 
     def test_parse_roster_basic(self, mock_yahoo_roster_response):
         """Test parsing a basic roster response."""
-        result = parse_team_roster(mock_yahoo_roster_response)
+        result = parse_team_roster(mock_yahoo_roster_response, season=2026)
 
         assert len(result) == 3
         assert result[0]["name"] == "Josh Allen"
@@ -27,13 +25,13 @@ class TestParseTeamRoster:
     def test_parse_roster_empty_response(self):
         """Test parsing when response has no roster data."""
         empty_response = {"fantasy_content": {"team": []}}
-        result = parse_team_roster(empty_response)
+        result = parse_team_roster(empty_response, season=2026)
         assert result == []
 
     def test_parse_roster_malformed_response(self):
         """Test parsing with malformed response structure."""
         malformed_response = {"fantasy_content": {"team": [{"other_key": "data"}]}}
-        result = parse_team_roster(malformed_response)
+        result = parse_team_roster(malformed_response, season=2026)
         assert result == []
 
     def test_parse_roster_missing_player_data(self):
@@ -64,7 +62,7 @@ class TestParseTeamRoster:
                 ]
             }
         }
-        result = parse_team_roster(response)
+        result = parse_team_roster(response, season=2026)
         assert len(result) == 1
         assert result[0]["name"] == "Incomplete Player"
         assert result[0]["status"] == "OK"  # Default status
@@ -99,7 +97,7 @@ class TestParseTeamRoster:
                 ]
             }
         }
-        result = parse_team_roster(response)
+        result = parse_team_roster(response, season=2026)
         assert len(result) == 1
         assert result[0]["position"] == "FLEX"  # Should use selected_position
 
@@ -132,9 +130,80 @@ class TestParseTeamRoster:
                 ]
             }
         }
-        result = parse_team_roster(response)
+        result = parse_team_roster(response, season=2026)
         assert len(result) == 1
         assert result[0]["team"] == "DEN"
+
+    def test_parse_roster_prefers_valid_api_bye_week(self):
+        """Test parsing keeps a valid Yahoo API bye over the 2026 fallback."""
+        response = {
+            "fantasy_content": {
+                "team": [
+                    [{"team_key": "461.l.61410.t.1"}],
+                    {
+                        "roster": {
+                            "0": {
+                                "players": {
+                                    "0": {
+                                        "player": [
+                                            [
+                                                {
+                                                    "name": {"full": "Api Bye Player"},
+                                                    "display_position": "TE",
+                                                    "editorial_team_abbr": "KC",
+                                                    "bye_weeks": {"week": "12"},
+                                                }
+                                            ]
+                                        ]
+                                    },
+                                    "count": 1,
+                                }
+                            }
+                        }
+                    },
+                ]
+            }
+        }
+
+        result = parse_team_roster(response, season=2026)
+
+        assert len(result) == 1
+        assert result[0]["bye"] == 12
+
+    def test_parse_roster_uses_official_2026_fallback_for_missing_api_bye(self):
+        """Test parsing falls back to official 2026 bye data when Yahoo omits bye."""
+        response = {
+            "fantasy_content": {
+                "team": [
+                    [{"team_key": "461.l.61410.t.1"}],
+                    {
+                        "roster": {
+                            "0": {
+                                "players": {
+                                    "0": {
+                                        "player": [
+                                            [
+                                                {
+                                                    "name": {"full": "Fallback Bye Player"},
+                                                    "display_position": "WR",
+                                                    "editorial_team_abbr": "KC",
+                                                }
+                                            ]
+                                        ]
+                                    },
+                                    "count": 1,
+                                }
+                            }
+                        }
+                    },
+                ]
+            }
+        }
+
+        result = parse_team_roster(response, season=2026)
+
+        assert len(result) == 1
+        assert result[0]["bye"] == 5
 
 
 class TestParseFreeAgentPlayers:
@@ -142,7 +211,7 @@ class TestParseFreeAgentPlayers:
 
     def test_parse_free_agents_basic(self, mock_yahoo_free_agents_response):
         """Test parsing basic free agent response."""
-        result = parse_yahoo_free_agent_players(mock_yahoo_free_agents_response)
+        result = parse_yahoo_free_agent_players(mock_yahoo_free_agents_response, season=2026)
 
         assert len(result) == 2
 
@@ -163,7 +232,7 @@ class TestParseFreeAgentPlayers:
     def test_parse_free_agents_empty_response(self):
         """Test parsing when no free agents in response."""
         empty_response = {"fantasy_content": {"league": [[{"league_key": "461.l.61410"}]]}}
-        result = parse_yahoo_free_agent_players(empty_response)
+        result = parse_yahoo_free_agent_players(empty_response, season=2026)
         assert result == []
 
     def test_parse_free_agents_missing_name(self):
@@ -191,7 +260,7 @@ class TestParseFreeAgentPlayers:
                 ]
             }
         }
-        result = parse_yahoo_free_agent_players(response)
+        result = parse_yahoo_free_agent_players(response, season=2026)
         assert result == []
 
     def test_parse_free_agents_with_percent_owned(self):
@@ -220,7 +289,7 @@ class TestParseFreeAgentPlayers:
                 ]
             }
         }
-        result = parse_yahoo_free_agent_players(response)
+        result = parse_yahoo_free_agent_players(response, season=2026)
         assert len(result) == 1
         assert result[0]["owned_pct"] == 87.5
 
@@ -239,7 +308,7 @@ class TestParseFreeAgentPlayers:
                 ]
             }
         }
-        result = parse_yahoo_free_agent_players(response)
+        result = parse_yahoo_free_agent_players(response, season=2026)
         assert result == []
 
     def test_parse_free_agents_ownership_with_zero_values(self):
@@ -273,7 +342,7 @@ class TestParseFreeAgentPlayers:
                 ]
             }
         }
-        result = parse_yahoo_free_agent_players(response)
+        result = parse_yahoo_free_agent_players(response, season=2026)
         assert len(result) == 1
         assert result[0]["owned_pct"] == 0
         assert result[0]["weekly_change"] == 0

@@ -7,6 +7,7 @@ get_user_team_key = None
 get_user_team_info = None
 yahoo_api_call = None
 parse_team_roster = None
+resolve_league_season = None
 
 
 async def handle_ff_get_matchup(arguments: dict) -> dict:
@@ -56,9 +57,10 @@ async def handle_ff_compare_teams(arguments: dict) -> dict:
 
     data_a = await yahoo_api_call(f"team/{team_key_a}/roster")
     data_b = await yahoo_api_call(f"team/{team_key_b}/roster")
+    season = await resolve_league_season(league_key)
 
-    roster_a = parse_team_roster(data_a)
-    roster_b = parse_team_roster(data_b)
+    roster_a = parse_team_roster(data_a, season=season)
+    roster_b = parse_team_roster(data_b, season=season)
 
     return {
         "league_key": league_key,
@@ -91,6 +93,7 @@ async def handle_ff_build_lineup(arguments: dict) -> dict:
 
     try:
         roster_data = await yahoo_api_call(f"team/{team_key}/roster")
+        season = await resolve_league_season(league_key)
         try:
             from lineup_optimizer import lineup_optimizer
         except ImportError as exc:
@@ -101,7 +104,7 @@ async def handle_ff_build_lineup(arguments: dict) -> dict:
                 "team_key": team_key,
             }
 
-        players = await lineup_optimizer.parse_yahoo_roster(roster_data)
+        players = await lineup_optimizer.parse_yahoo_roster(roster_data, season=season)
         if not players:
             return {
                 "error": "Failed to parse Yahoo roster data",

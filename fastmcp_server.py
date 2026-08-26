@@ -9,12 +9,13 @@ This module wraps the existing Yahoo Fantasy Football tooling defined in
 
 import json
 import os
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import asdict, is_dataclass
-from typing import Any, Awaitable, Callable, Dict, Literal, Optional, Sequence, Union
+from typing import Any, Callable, Dict, Literal, Optional
 
 from fastmcp import Context, FastMCP
-from mcp.types import ContentBlock, TextContent
+from mcp.types import TextContent
+from src.api import refresh_yahoo_token
 
 import fantasy_football_multi_league
 
@@ -22,15 +23,25 @@ import fantasy_football_multi_league
 
 # Remove explicit typing to avoid type conflicts with evolving MCP types
 _legacy_call_tool = fantasy_football_multi_league.call_tool
-_legacy_refresh_token = fantasy_football_multi_league.refresh_yahoo_token
+_legacy_refresh_token = refresh_yahoo_token
+ENABLE_REDDIT_SENTIMENT = fantasy_football_multi_league.ENABLE_REDDIT_SENTIMENT
 
-server = FastMCP(
-    name="fantasy-football",
-    instructions=(
+_SERVER_INSTRUCTIONS = (
+    "Yahoo Fantasy Football operations including league discovery, roster "
+    "analysis, waiver insights, and draft tools. "
+    "Set the YAHOO_* environment variables before starting the server."
+)
+if ENABLE_REDDIT_SENTIMENT:
+    _SERVER_INSTRUCTIONS = (
         "Yahoo Fantasy Football operations including league discovery, roster "
         "analysis, waiver insights, draft tools, and Reddit sentiment checks. "
         "Set the YAHOO_* environment variables before starting the server."
-    ),
+    )
+
+
+server = FastMCP(
+    name="fantasy-football",
+    instructions=_SERVER_INSTRUCTIONS,
 )
 
 _TOOL_PROMPTS: Dict[str, str] = {
@@ -43,6 +54,10 @@ _TOOL_PROMPTS: Dict[str, str] = {
         "📋 Get league configuration and settings. "
         "Parameters: league_key only. Returns scoring type and your team summary."
     ),
+    "ff_get_teams": (
+        "List all teams in a specific league with basic team information. "
+        "Parameters: league_key only."
+    ),
     "ff_get_standings": (
         "🏆 Get current league standings. "
         "Parameters: league_key only. Returns ranks, records, points for all teams."
@@ -54,7 +69,8 @@ _TOOL_PROMPTS: Dict[str, str] = {
     ),
     "ff_get_matchup": (
         "🆚 Get weekly matchup for your team. "
-        "Parameters: league_key (required), week (optional). Returns opponent and projections."
+        "Parameters: league_key (required), week (optional). "
+        "Returns the raw Yahoo matchup payload for the selected week."
     ),
     "ff_get_players": (
         "Research free agents or player pools for waiver pickups by filtering "
@@ -69,7 +85,10 @@ _TOOL_PROMPTS: Dict[str, str] = {
         "Build optimal lineup from your roster using strategy-based optimization and positional constraints."
     ),
     "ff_refresh_token": (
-        "🔑 Refresh Yahoo OAuth token. " "NO parameters. Use when API returns 401 errors."
+        "🔑 Refresh Yahoo OAuth token. "
+        "NO parameters. Use for expired-token 401s (oauth_problem=token_rejected). "
+        "Does NOT help with additional_authorization_required - that means the Yahoo app "
+        "lacks Fantasy Sports API provisioning; see INSTALLATION.md."
     ),
     "ff_get_api_status": (
         "📊 Check API health and rate limits. "
@@ -112,6 +131,20 @@ def _tool_meta(name: str) -> Dict[str, str]:
     return {"prompt": _TOOL_PROMPTS[name]}
 
 
+def _optional_reddit_tool(
+    *,
+    name: str,
+    description: str,
+    meta: Dict[str, str],
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+        if ENABLE_REDDIT_SENTIMENT:
+            server.tool(name=name, description=description, meta=meta)(func)
+        return func
+
+    return decorator
+
+
 async def _call_legacy_tool(
     name: str,
     *,
@@ -143,12 +176,12 @@ async def _call_legacy_tool(
     def _coerce_text(block: Any) -> TextContent:
         if isinstance(block, TextContent):
             return block
-        if hasattr(block, "text") and isinstance(getattr(block, "text"), str):
-            return TextContent(type="text", text=getattr(block, "text"))
+        if hasattr(block, "text") and isinstance(block.text, str):
+            return TextContent(type="text", text=block.text)
         if is_dataclass(block) and not isinstance(block, type):
             return TextContent(type="text", text=json.dumps(asdict(block)))
         if hasattr(block, "data"):
-            data = getattr(block, "data")
+            data = block.data
             if isinstance(data, bytes):
                 try:
                     data = data.decode("utf-8")
@@ -256,6 +289,18 @@ async def ff_get_league_info(
         ctx=ctx,
         league_key=league_key,
     )
+
+
+@server.tool(
+    name="ff_get_teams",
+    description=(
+        "Get all teams in a specific Yahoo league with basic team information. "
+        "Parameters: league_key (required only)."
+    ),
+    meta=_tool_meta("ff_get_teams"),
+)
+async def ff_get_teams(ctx: Context, league_key: str) -> Dict[str, Any]:
+    return await _call_legacy_tool("ff_get_teams", ctx=ctx, league_key=league_key)
 
 
 @server.tool(
@@ -384,7 +429,7 @@ async def ff_get_standings(
     description=(
         "🆚 Get weekly matchup for your team. "
         "Parameters: league_key (required), week (optional, defaults to current). "
-        "Returns opponent info and projected scores."
+        "Returns the raw Yahoo matchup payload for the selected week."
     ),
     meta=_tool_meta("ff_get_matchup"),
 )
@@ -401,7 +446,7 @@ async def ff_get_matchup(
         week: Week number (optional, defaults to current week)
 
     Returns:
-        Dict with matchup data including opponent and projections
+        Dict with the raw Yahoo matchup payload
     """
     return await _call_legacy_tool(
         "ff_get_matchup",
@@ -523,7 +568,11 @@ async def ff_build_lineup(
     description=(
         "🔑 Refresh Yahoo OAuth token. "
         "NO parameters required. "
-        "Use when API calls return 401 authentication errors."
+        "Use when API calls return 401 errors from an expired token "
+        "(oauth_problem=token_rejected). A 401 with "
+        "additional_authorization_required is a provisioning problem the "
+        "refresh cannot fix - the Yahoo app needs Fantasy Sports API access "
+        "approved at https://sports.yahoo.com/developer/access/."
     ),
     meta=_tool_meta("ff_refresh_token"),
 )
@@ -763,7 +812,7 @@ async def ff_analyze_draft_state(
     )
 
 
-@server.tool(
+@_optional_reddit_tool(
     name="ff_analyze_reddit_sentiment",
     description=(
         "Analyze recent Reddit chatter for one or more players to gauge public "
@@ -782,23 +831,6 @@ async def ff_analyze_reddit_sentiment(
         players=list(players),
         time_window_hours=time_window_hours,
     )
-
-
-# ============================================================================
-# ENHANCED TOOLS - Advanced decision-making capabilities for client LLMs
-# ============================================================================
-
-# REMOVED: ff_get_roster_with_projections_wrapper - replaced by ff_get_roster with data_level='full'
-# REMOVED: ff_analyze_lineup_options_wrapper - complex functionality can be achieved through ff_build_lineup
-
-
-# REMOVED: ff_compare_players_wrapper - player comparison can be done through ff_get_players and ff_get_waiver_wire
-
-
-# REMOVED: ff_what_if_analysis_wrapper - scenario analysis can be done using ff_build_lineup with different strategies
-
-
-# REMOVED: ff_get_decision_context_wrapper - context can be gathered through ff_get_league_info, ff_get_matchup, ff_get_standings
 
 
 # ============================================================================
@@ -925,7 +957,7 @@ Analyze:
 Provide a week-by-week action plan."""
 
 
-@server.prompt  
+@server.prompt
 def playoff_preparation(league_key: str, team_key: str, current_week: int) -> str:
     """Generate a prompt for playoff preparation strategy."""
     return f"""Create a playoff preparation strategy for team {team_key} in league {league_key} (currently Week {current_week}).
@@ -943,7 +975,9 @@ Provide actionable recommendations to maximize playoff success."""
 
 
 @server.prompt
-def trade_proposal_generation(league_key: str, my_team_key: str, target_team_key: str, position_need: str) -> str:
+def trade_proposal_generation(
+    league_key: str, my_team_key: str, target_team_key: str, position_need: str
+) -> str:
     """Generate a prompt for creating fair trade proposals."""
     return f"""Generate fair trade proposals between my team ({my_team_key}) and {target_team_key} in league {league_key}.
 
@@ -961,7 +995,9 @@ For each proposal explain why it works for both teams."""
 
 
 @server.prompt
-def injury_replacement_strategy(league_key: str, injured_player: str, injury_length: str, position: str) -> str:
+def injury_replacement_strategy(
+    league_key: str, injured_player: str, injury_length: str, position: str
+) -> str:
     """Generate a prompt for injury replacement analysis."""
     return f"""My player {injured_player} ({position}) is injured for approximately {injury_length} in league {league_key}.
 
@@ -996,7 +1032,9 @@ Rank options with confidence levels and reasoning."""
 
 
 @server.prompt
-def season_long_strategy_check(league_key: str, team_key: str, current_record: str, weeks_remaining: int) -> str:
+def season_long_strategy_check(
+    league_key: str, team_key: str, current_record: str, weeks_remaining: int
+) -> str:
     """Generate a prompt for comprehensive season strategy assessment."""
     return f"""Assess season-long strategy for team {team_key} in league {league_key}.
 
@@ -1693,6 +1731,7 @@ __all__ = [
     # Core Tools
     "ff_get_leagues",
     "ff_get_league_info",
+    "ff_get_teams",
     "ff_get_standings",
     "ff_get_roster",
     "ff_get_matchup",
@@ -1707,7 +1746,6 @@ __all__ = [
     "ff_get_draft_rankings",
     "ff_get_draft_recommendation",
     "ff_analyze_draft_state",
-    "ff_analyze_reddit_sentiment",
     # Prompts - Pre-built prompt templates for LLMs
     "analyze_roster_strengths",
     "draft_strategy_advice",
@@ -1735,10 +1773,12 @@ __all__ = [
     "get_tool_selection_guide",
     "get_version",
 ]
+if ENABLE_REDDIT_SENTIMENT:
+    __all__.append("ff_analyze_reddit_sentiment")
 
 # Optional resource: expose deployed commit SHA for diagnostics
 try:
-    with open(os.path.join(os.path.dirname(__file__), "COMMIT_SHA"), "r", encoding="utf-8") as _f:
+    with open(os.path.join(os.path.dirname(__file__), "COMMIT_SHA"), encoding="utf-8") as _f:
         _COMMIT_SHA = _f.read().strip()
 except Exception:  # pragma: no cover - best effort
     _COMMIT_SHA = "unknown"
@@ -1755,9 +1795,9 @@ def get_tool_selection_guide() -> str:
                 "1. START: ff_get_leagues - Always begin here if you don't have a league_key",
                 "2. CONTEXT: ff_get_league_info - Understand league settings and scoring",
                 "3. BASELINE: ff_get_roster - Know current lineup before making recommendations",
-                "4. COMPETITION: ff_get_matchup - Analyze weekly opponent for strategic adjustments",
+                "4. COMPETITION: ff_get_matchup - Retrieve weekly matchup payloads",
                 "5. OPPORTUNITIES: ff_get_waiver_wire - Identify available upgrades",
-                "6. OPTIMIZATION: ff_build_lineup - AI-powered lineup construction",
+                "6. OPTIMIZATION: ff_build_lineup - Build a strategy-based lineup",
             ],
             "tool_categories": {
                 "CORE_LEAGUE_DATA": {
@@ -1779,16 +1819,15 @@ def get_tool_selection_guide() -> str:
                 "MATCHUP_COMPETITION": {
                     "description": "Head-to-head analysis and competitive intelligence",
                     "tools": {
-                        "ff_get_matchup": "Opponent Analysis: Weekly head-to-head strategic insights",
+                        "ff_get_matchup": "Matchup Payload: Raw weekly Yahoo matchup data",
                         "ff_compare_teams": "Team Comparison: Direct roster and performance comparisons",
                     },
                 },
                 "OPTIMIZATION_STRATEGY": {
-                    "description": "AI-powered decision making and strategy tools",
+                    "description": "Lineup and draft decision support tools",
                     "tools": {
-                        "ff_build_lineup": "AI Optimization: Championship-level lineup recommendations with positional constraints",
+                        "ff_build_lineup": "Lineup Builder: Strategy-based lineup recommendations with positional constraints",
                         "ff_get_draft_rankings": "Player Tiers: Value assessment and tier-based rankings",
-                        "ff_analyze_reddit_sentiment": "Market Intelligence: Public opinion and trending players",
                     },
                 },
                 "ADVANCED_ANALYSIS": {
@@ -1817,22 +1856,19 @@ def get_tool_selection_guide() -> str:
                 "competitive_analysis": [
                     "ff_get_league_info -> ff_get_standings -> ff_compare_teams -> ff_get_matchup"
                 ],
-                "market_research": [
-                    "ff_get_waiver_wire -> ff_analyze_reddit_sentiment -> ff_get_players"
-                ],
+                "player_research": ["ff_get_waiver_wire -> ff_get_players"],
             },
             "decision_framework": {
                 "data_gathering": "Always start with league discovery and current roster state",
                 "context_building": "Understand league settings, scoring, and competitive landscape",
-                "opportunity_identification": "Use waiver wire and sentiment analysis for edge cases",
-                "optimization": "Apply AI-powered tools for championship-level recommendations",
+                "opportunity_identification": "Use waiver wire and player search data for edge cases",
+                "optimization": "Apply strategy parameters for lineup recommendations",
                 "validation": "Cross-reference multiple data sources for confident decisions",
             },
             "best_practices": [
                 "NEVER guess league_key - always use ff_get_leagues first",
                 "ALWAYS check current roster before making lineup recommendations",
-                "USE ff_get_matchup for opponent-specific weekly strategy",
-                "LEVERAGE ff_analyze_reddit_sentiment for contrarian plays",
+                "USE ff_get_matchup to retrieve opponent-specific weekly data",
                 "APPLY strategy parameters in ff_build_lineup for optimized construction",
                 "COMBINE multiple tools for comprehensive decision making",
             ],

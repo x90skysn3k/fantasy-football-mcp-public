@@ -283,6 +283,42 @@ class TestLineupOptimizer:
             players = await optimizer.parse_yahoo_roster(payload)
             assert players == []
 
+    @pytest.mark.asyncio
+    async def test_parse_yahoo_roster_requires_season_for_raw_roster(self):
+        """Test raw Yahoo roster parsing requires explicit season for bye fallback."""
+        optimizer = LineupOptimizer()
+        raw_roster_payload = {
+            "fantasy_content": {
+                "team": [
+                    [{"team_key": "461.l.61410.t.1"}],
+                    {
+                        "roster": {
+                            "0": {
+                                "players": {
+                                    "0": {
+                                        "player": [
+                                            [
+                                                {
+                                                    "name": {"full": "Josh Allen"},
+                                                    "display_position": "QB",
+                                                    "editorial_team_abbr": "BUF",
+                                                }
+                                            ],
+                                            {"selected_position": [{"position": "QB"}]},
+                                        ]
+                                    },
+                                    "count": 1,
+                                }
+                            }
+                        }
+                    },
+                ]
+            }
+        }
+
+        with pytest.raises(ValueError, match="season is required"):
+            await optimizer.parse_yahoo_roster(raw_roster_payload)
+
 
 class TestBenchSlots:
     """Test bench slot definitions."""

@@ -5,7 +5,20 @@ import socket
 from typing import Dict
 
 import aiohttp
+
+from src.api.yahoo_credentials import (
+    YAHOO_PROVISIONING_MESSAGE,
+    YahooCredentialError,
+    YahooProvisioningError,
+    get_yahoo_consumer_credentials,
+    is_yahoo_provisioning_failure,
+    is_yahoo_token_rejected,
+    load_project_environment,
+    persist_yahoo_tokens,
+)
 from src.api.yahoo_utils import rate_limiter, response_cache
+
+load_project_environment()
 
 # Module-level token cache
 _YAHOO_ACCESS_TOKEN = os.getenv("YAHOO_ACCESS_TOKEN")
@@ -65,21 +78,37 @@ async def yahoo_api_call(
                 if use_cache:
                     await response_cache.set(endpoint, data)
                 return data
-            elif response.status == 401 and retry_on_auth_fail:
-                # Token expired, try to refresh
-                refresh_result = await refresh_yahoo_token()
-                if refresh_result.get("status") == "success":
-                    # Token refreshed, retry the API call with new token
-                    return await yahoo_api_call(
-                        endpoint, retry_on_auth_fail=False, use_cache=use_cache
+            elif response.status == 401:
+                text = await response.text()
+                if _is_provisioning_failure(response.status, text):
+                    raise YahooProvisioningError(YAHOO_PROVISIONING_MESSAGE)
+                if retry_on_auth_fail and _is_token_rejected(response.status, text):
+                    refresh_result = await refresh_yahoo_token()
+                    if refresh_result.get("status") == "success":
+                        return await yahoo_api_call(
+                            endpoint, retry_on_auth_fail=False, use_cache=use_cache
+                        )
+                    raise Exception(
+                        "Yahoo API auth failed; refresh token was rejected. "
+                        "Reauthorize Yahoo with utils/setup_yahoo_auth.py."
                     )
-                else:
-                    # Refresh failed, raise the original error
-                    text = await response.text()
-                    raise Exception(f"Yahoo API auth failed and token refresh failed: {text[:200]}")
+                if retry_on_auth_fail:
+                    raise Exception(
+                        f"Yahoo API error {response.status}: {_safe_response_excerpt(text)}"
+                    )
+                raise Exception("Yahoo API error 401 after token refresh")
+            elif response.status == 403:
+                text = await response.text()
+                if _is_provisioning_failure(response.status, text):
+                    raise YahooProvisioningError(YAHOO_PROVISIONING_MESSAGE)
+                raise Exception(
+                    f"Yahoo API error {response.status}: {_safe_response_excerpt(text)}"
+                )
             else:
                 text = await response.text()
-                raise Exception(f"Yahoo API error {response.status}: {text[:200]}")
+                raise Exception(
+                    f"Yahoo API error {response.status}: {_safe_response_excerpt(text)}"
+                )
 
 
 async def refresh_yahoo_token() -> Dict:
@@ -90,12 +119,14 @@ async def refresh_yahoo_token() -> Dict:
             - {"status": "success", "message": "...", "expires_in": 3600}
             - {"status": "error", "message": "...", "details": "..."}
     """
-    client_id = os.getenv("YAHOO_CONSUMER_KEY")
-    client_secret = os.getenv("YAHOO_CONSUMER_SECRET")
+    try:
+        client_id, client_secret = get_yahoo_consumer_credentials()
+    except YahooCredentialError as error:
+        return {"status": "error", "message": str(error)}
     refresh_token = os.getenv("YAHOO_REFRESH_TOKEN")
 
-    if not all([client_id, client_secret, refresh_token]):
-        return {"status": "error", "message": "Missing credentials in environment"}
+    if not refresh_token:
+        return {"status": "error", "message": "Missing Yahoo refresh token in environment"}
 
     token_url = "https://api.login.yahoo.com/oauth2/get_token"
 
@@ -114,14 +145,11 @@ async def refresh_yahoo_token() -> Dict:
                     token_data = await response.json()
                     new_access_token = token_data.get("access_token")
                     new_refresh_token = token_data.get("refresh_token", refresh_token)
-                    expires_in = token_data.get("expires_in", 3600)
+                    expires_in = int(token_data.get("expires_in", 3600))
 
-                    # Update global token
+                    persist_yahoo_tokens(new_access_token, new_refresh_token, expires_in)
                     set_access_token(new_access_token)
-
-                    # Update environment
-                    if new_refresh_token != refresh_token:
-                        os.environ["YAHOO_REFRESH_TOKEN"] = new_refresh_token
+                    os.environ["YAHOO_REFRESH_TOKEN"] = new_refresh_token
 
                     return {
                         "status": "success",
@@ -129,12 +157,31 @@ async def refresh_yahoo_token() -> Dict:
                         "expires_in": expires_in,
                         "expires_in_hours": round(expires_in / 3600, 1),
                     }
-                else:
-                    error_text = await response.text()
-                    return {
-                        "status": "error",
-                        "message": f"Failed to refresh token: {response.status}",
-                        "details": error_text[:200],
-                    }
-    except Exception as e:
-        return {"status": "error", "message": f"Error refreshing token: {str(e)}"}
+                return {
+                    "status": "error",
+                    "message": (
+                        f"Failed to refresh token: {response.status}. "
+                        "Reauthorize Yahoo with utils/setup_yahoo_auth.py."
+                    ),
+                }
+    except YahooCredentialError as error:
+        return {"status": "error", "message": str(error)}
+    except Exception:
+        return {
+            "status": "error",
+            "message": "Error refreshing token. Reauthorize Yahoo if this persists.",
+        }
+
+
+def _is_provisioning_failure(status: int, text: str) -> bool:
+    return is_yahoo_provisioning_failure(status, text)
+
+
+def _is_token_rejected(status: int, text: str) -> bool:
+    return is_yahoo_token_rejected(status, text)
+
+
+def _safe_response_excerpt(text: str) -> str:
+    if not text:
+        return ""
+    return "response body omitted"
